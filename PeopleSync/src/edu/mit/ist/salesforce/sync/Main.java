@@ -1,13 +1,12 @@
 package edu.mit.ist.salesforce.sync;
 
-import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 
 import javax.mail.Message;
 import javax.mail.MessagingException;
+import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
-import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
@@ -15,28 +14,39 @@ import javax.mail.internet.MimeMessage;
 public class Main {
 
 	public static void main(String[] args) {
+		final String username = "herokumailforme@gmail.com";
+		final String password = "Te3tL@b1";
+
 		Properties props = new Properties();
-		props.setProperty("mail.smtp.host", "outgoing.mit.edu");
-        Session session = Session.getDefaultInstance(props, null);
+		props.put("mail.smtp.auth", "true");
+		props.put("mail.smtp.starttls.enable", "true");
+		props.put("mail.smtp.host", "smtp.gmail.com");
+		props.put("mail.smtp.port", "587");
 
-        String msgBody = "...";
+		Session session = Session.getInstance(props,
+		  new javax.mail.Authenticator() {
+			protected PasswordAuthentication getPasswordAuthentication() {
+				return new PasswordAuthentication(username, password);
+			}
+		  });
 
-        try {
-            Message msg = new MimeMessage(session);
-            msg.setFrom(new InternetAddress("ctoews@mit.edu", "Chris Toews"));
-            msg.addRecipient(Message.RecipientType.TO,
-                             new InternetAddress("ctoews@mit.edu", "Mr. User"));
-            msg.setSubject("Your Example.com account has been activated");
-            msg.setText(msgBody);
-            Transport.send(msg);
+		try {
 
-        } catch (AddressException e) {
-            e.printStackTrace();
-        } catch (MessagingException e) {
-            e.printStackTrace();
-        }catch(Exception ex){
-        	ex.printStackTrace();
-        }
-	}
+			Message message = new MimeMessage(session);
+			message.setFrom(new InternetAddress("herokumailforme@gmail.com"));
+			message.setRecipients(Message.RecipientType.TO,
+				InternetAddress.parse("ctoews@mit.edu"));
+			message.setSubject("Testing Subject");
+			message.setText("Dear Mail Crawler,"
+				+ "\n\n No spam to my email, please!");
+
+			Transport.send(message);
+
+			System.out.println("Done");
+
+		} catch (MessagingException e) {
+			throw new RuntimeException(e);
+		}
+	}//end of main
 	
-}
+}//end of class
