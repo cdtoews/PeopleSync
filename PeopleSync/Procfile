@@ -1,1 +1,1 @@
-testproc:    java -cp target/classes:target/dependency/* Main
+testproc:    java -cp target/classes:target/dependency/* edu.mit.ist.salesforce.sync.Main
