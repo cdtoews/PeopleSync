@@ -32,12 +32,12 @@ public class Main {
 
 			// load a properties file
 			getProp.load(input);
-			username = getProp.getProperty("username");
-			password = getProp.getProperty("password");
+			username = getProp.getProperty("smtpuser");
+			password = getProp.getProperty("smtppass");
 		}catch(Exception ex){
 			System.out.println("didn't find prop file, trying environmental variables");
-			username = System.getenv("DATABASE_URL");
-			password = System.getenv("password");
+			username = System.getenv("smtpuser");
+			password = System.getenv("smtppass");
 		}
 		
 		System.out.println("user:" + username);
