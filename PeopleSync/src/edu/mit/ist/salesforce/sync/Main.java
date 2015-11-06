@@ -15,7 +15,11 @@ import javax.mail.internet.MimeMessage;
 
 public class Main {
 
-	public static void main(String[] args) {
+	public static void main(String[] args){
+		System.out.println("You are inside Main");
+	}
+	
+	public static void nain(String[] args) {
 		 String username ;
 		 String password;
 
