@@ -35,10 +35,12 @@ public class Main {
 			username = getProp.getProperty("username");
 			password = getProp.getProperty("password");
 		}catch(Exception ex){
-			ex.printStackTrace();
+			System.out.println("didn't find prop file, trying environmental variables");
 			username = System.getenv("DATABASE_URL");
 			password = System.getenv("password");
 		}
+		
+		System.out.println("user:" + username);
 		
 		final String finalUser = username;
 		final String finalPass = password;
