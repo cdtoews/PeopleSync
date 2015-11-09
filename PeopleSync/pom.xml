@@ -86,6 +86,10 @@
                     <mainClass>RunMe</mainClass>
                     <name>RunMe</name>
                 </program>
+                <program>
+                    <mainClass>edu.mit.ist.salesforce.sync.Main</mainClass>
+                    <name>Main</name>
+                </program>
             </programs>
           </configuration>
           <executions>
