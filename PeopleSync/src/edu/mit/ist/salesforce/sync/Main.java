@@ -22,6 +22,7 @@ public class Main {
 
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
+		emailMe();
 		Connection conn = getConnection();
 		PreparedStatement readPS = conn.prepareStatement("select * from sftest1.account");
 		ResultSet readRS = readPS.executeQuery();
