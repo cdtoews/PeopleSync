@@ -1,7 +1,12 @@
 package edu.mit.ist.salesforce.sync;
 
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import javax.mail.Message;
@@ -15,30 +20,24 @@ import javax.mail.internet.MimeMessage;
 
 public class Main {
 
-	public static void notmain(String[] args){
-		System.out.println("You are inside Main");
+	
+	public static void main(String[] args) throws URISyntaxException, SQLException{
+		Connection conn = getConnection();
+		PreparedStatement readPS = conn.prepareStatement("select * from sftest1.account");
+		ResultSet readRS = readPS.executeQuery();
+		while(readRS.next()){
+			System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
+		}
+		System.out.println("done");
+		readRS.close();
+		readPS.close();
+		conn.close();
 	}
 	
-	public static void main(String[] args) {
-		 String username ;
-		 String password;
-
-		
-		Properties getProp = new Properties();
-		InputStream input = null;
-		
-		try{
-			input = new FileInputStream("config.properties");
-
-			// load a properties file
-			getProp.load(input);
-			username = getProp.getProperty("smtpuser");
-			password = getProp.getProperty("smtppass");
-		}catch(Exception ex){
-			System.out.println("didn't find prop file, trying environmental variables");
-			username = System.getenv("smtpuser");
-			password = System.getenv("smtppass");
-		}
+	public static void emailMe() {
+		 		
+		String username = System.getenv("smtpuser");
+		String password = System.getenv("smtppass");
 		
 		System.out.println("user:" + username);
 		
@@ -76,5 +75,16 @@ public class Main {
 			throw new RuntimeException(e);
 		}
 	}//end of main
+	
+	
+	private static Connection getConnection() throws URISyntaxException, SQLException {
+	    URI dbUri = new URI(System.getenv("DATABASE_URL"));
+
+	    String username = dbUri.getUserInfo().split(":")[0];
+	    String password = dbUri.getUserInfo().split(":")[1];
+	    String dbUrl = "jdbc:postgresql://" + dbUri.getHost() + ':' + dbUri.getPort() + dbUri.getPath() + "?ssl=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
+	    System.out.println(dbUrl);
+	    return DriverManager.getConnection(dbUrl, username, password);
+	}
 	
 }//end of class

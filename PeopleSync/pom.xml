@@ -15,7 +15,31 @@
 	<artifactId>postgresql</artifactId>
 	<version>9.1-901-1.jdbc4</version>
 </dependency>
-    
+    <dependency>
+    <groupId>com.mashape.unirest</groupId>
+    <artifactId>unirest-java</artifactId>
+    <version>1.4.7</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.httpcomponents</groupId>
+  <artifactId>httpclient</artifactId>
+  <version>4.3.6</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.httpcomponents</groupId>
+  <artifactId>httpasyncclient</artifactId>
+  <version>4.0.2</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.httpcomponents</groupId>
+  <artifactId>httpmime</artifactId>
+  <version>4.3.6</version>
+</dependency>
+<dependency>
+  <groupId>org.json</groupId>
+  <artifactId>json</artifactId>
+  <version>20140107</version>
+</dependency>
   </dependencies>
   <build>
     <sourceDirectory>src</sourceDirectory>
@@ -26,6 +50,14 @@
         <version>0.5.4</version>
        <configuration>
   <appName>peoplesync</appName>
+  <assembleDirectory>target</assembleDirectory>
+            <programs>
+                
+                <program>
+                    <mainClass>RunMe</mainClass>
+                    <name>RunMe</name>
+                </program>
+            </programs>
 </configuration>
       </plugin>
       <plugin>

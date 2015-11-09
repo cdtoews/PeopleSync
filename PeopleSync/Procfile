@@ -1,1 +1,2 @@
 testproc:    java -cp target/classes:target/dependency/* edu.mit.ist.salesforce.sync.Main
+RunMe: sh target/bin/RunMe
