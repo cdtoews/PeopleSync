@@ -7,6 +7,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Properties;
 
 import javax.mail.Message;
@@ -20,19 +22,14 @@ import javax.mail.internet.MimeMessage;
 
 public class Main {
 
+	public static final String APP_NAME = "PEOPLE_SYNC";
+	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		emailMe();
-		Connection conn = getConnection();
-		PreparedStatement readPS = conn.prepareStatement("select * from sftest1.account");
-		ResultSet readRS = readPS.executeQuery();
-		while(readRS.next()){
-			System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
-		}
-		System.out.println("done");
-		readRS.close();
-		readPS.close();
-		conn.close();
+		//emailMe();
+		Departments depts = new Departments();
+		depts.loadData();
+		depts.CompareUpdate();
 	}
 	
 	public static void emailMe() {
@@ -78,14 +75,19 @@ public class Main {
 	}//end of main
 	
 	
-	private static Connection getConnection() throws URISyntaxException, SQLException {
+	public static Connection getConnection() throws URISyntaxException, SQLException {
 	    URI dbUri = new URI(System.getenv("DATABASE_URL"));
 
 	    String username = dbUri.getUserInfo().split(":")[0];
 	    String password = dbUri.getUserInfo().split(":")[1];
 	    String dbUrl = "jdbc:postgresql://" + dbUri.getHost() + ':' + dbUri.getPort() + dbUri.getPath() + "?ssl=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
-	    System.out.println(dbUrl);
+	    //System.out.println(dbUrl);
 	    return DriverManager.getConnection(dbUrl, username, password);
+	}
+	
+	
+	public static void writeLog(String whatToWrite){
+		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " " + whatToWrite);
 	}
 	
 }//end of class
