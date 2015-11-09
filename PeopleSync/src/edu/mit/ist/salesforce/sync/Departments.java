@@ -17,15 +17,17 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class Departments {
 	
-	public static final String SF_ACCOUNTS_SQL = "select * from sftest1.account where from_api__c = true and active__c = true and orgunitid__c is not null";
-	public static final String SF_DEACTIVEATE_ACCOUNT_SQL = "update sftest1.account set active__c = false, inactive_date__c = current_date where sfid = ?";
+	public static final String SF_ACCOUNTS_SQL = "select * from <schema>.account where from_api__c = true and active__c = true and orgunitid__c is not null";
+	public static final String SF_DEACTIVEATE_ACCOUNT_SQL = "update <schema>.account set active__c = false, inactive_date__c = current_date where sfid = ?";
 	public static final String INSERT_ACCOUNT_SQL = 
-												"insert into sftest1.account \n" +
+												"insert into <schema>.account \n" +
 												"(name,orgunitid__c, active_date__c, active__c, from_api__c) \n" +
 												"values \n" +
 												"(?, ?, current_date, true, true) \n";
 	
-	public static final String UPDATE_ACCOUNT_SQL = "update sftest1.account set name = ? where sfid like ?";
+	public static final String UPDATE_ACCOUNT_SQL = "update <schema>.account set name = ? where sfid like ?";
+	
+	String schema;
 	
 	TreeMap<String, Department> apiMap ;
 	TreeMap<String, Department> sfMap;
@@ -33,7 +35,7 @@ public class Departments {
 	Connection conn;
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		Departments me = new Departments();
+		Departments me = new Departments("sftest1");
 		me.loadAPIdepts();
 		System.out.println("\n\n------ API Map ------\n\n");
 		System.out.print(listDepts(me.apiMap));
@@ -45,7 +47,8 @@ public class Departments {
 	}
 	
 	
-	public Departments() throws URISyntaxException, SQLException{
+	public Departments(String schema) throws URISyntaxException, SQLException{
+		this.schema = schema;
 		conn = Main.getConnection();
 		apiMap  = new TreeMap<String, Department>();
 		sfMap   = new TreeMap<String, Department>();
@@ -63,6 +66,12 @@ public class Departments {
 		deactivateDepts();
 		insertDepts();
 		updateDepts();
+		try {
+			conn.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 		
 
@@ -111,7 +120,7 @@ public class Departments {
 	private  void loadSFdepts(){
 		try {
 			Main.writeLog(" TASK=LOAD_SF_DATA STATUS=STARTING");
-			PreparedStatement readPS = conn.prepareStatement(SF_ACCOUNTS_SQL);
+			PreparedStatement readPS = conn.prepareStatement(SF_ACCOUNTS_SQL.replace("<schema>", schema));
 			ResultSet readRS = readPS.executeQuery();
 			while(readRS.next()){
 				//System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
@@ -165,7 +174,7 @@ public class Departments {
 	private void deactivateDepts() {
 		Main.writeLog(" TASK=DEACTIVATING_ACCOUNTS STATUS=STARTING");
 		try {
-			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL);
+			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL.replace("<schema>", schema));
 			Iterator<String> it = sfMap.keySet().iterator();
 			int updatedCount = 0;
 			while(it.hasNext()){
@@ -181,6 +190,7 @@ public class Departments {
 				}
 				
 			}
+			removePS.close();
 			Main.writeLog(" TASK=DEACTIVATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -194,7 +204,7 @@ public class Departments {
 		Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
 		int updatedCount = 0;
 		try{
-			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL);
+			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL.replace("<schema>", schema));
 			Iterator<String> it = addMap.keySet().iterator();
 			while(it.hasNext()){
 				updatedCount ++;
@@ -211,6 +221,7 @@ public class Departments {
 					Main.writeLog(" TASK=INSERTING_ACCOUNT STATUS=ERROR ORGUNITID=" + thisID + " UPDATE_COUNT=" + numUpdated);
 				}
 			}
+			insertPS.close();
 			Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 			
 		}catch(SQLException ex){
@@ -224,7 +235,7 @@ public class Departments {
 	private void updateDepts(){
 		Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
 		try{
-			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL);
+			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL.replace("<schema>", schema));
 			Iterator<String> it = apiMap.keySet().iterator();
 			int updatedCount = 0;
 			while(it.hasNext()){
@@ -244,6 +255,7 @@ public class Departments {
 					Main.writeLog(" TASK=UPDATING_ACCOUNT STATUS=ERROR ORGUNITID=" + thisID + " SFID=" + thisSFid + " UPDATE_COUNT=" + numUpdated);
 				}
 			}
+			updatePS.close();
 		}catch(SQLException ex){
 			Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION");
 			ex.printStackTrace();

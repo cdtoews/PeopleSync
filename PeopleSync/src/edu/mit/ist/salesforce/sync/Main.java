@@ -22,14 +22,24 @@ import javax.mail.internet.MimeMessage;
 
 public class Main {
 
+	public static String current_schema = "INITIALIZING";
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
 		//emailMe();
-		Departments depts = new Departments();
-		depts.loadData();
-		depts.CompareUpdate();
+		String[] schemas = new String[]{"sftest1","sfprod"};
+		
+		for(String schema: schemas){
+			current_schema = schema;
+			Departments depts = new Departments(schema);
+			depts.loadData();
+			depts.CompareUpdate();
+			
+		}
+		
+		
+		
 	}
 	
 	public static void emailMe() {
@@ -87,7 +97,7 @@ public class Main {
 	
 	
 	public static void writeLog(String whatToWrite){
-		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " " + whatToWrite);
+		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite);
 	}
 	
 }//end of class
