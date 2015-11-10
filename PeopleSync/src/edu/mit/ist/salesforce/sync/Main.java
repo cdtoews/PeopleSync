@@ -4,12 +4,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
+import java.util.TreeMap;
 
 import javax.mail.Message;
 import javax.mail.MessagingException;
@@ -18,6 +17,13 @@ import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import com.mashape.unirest.http.HttpResponse;
+import com.mashape.unirest.http.Unirest;
+import com.mashape.unirest.http.exceptions.UnirestException;
 
 
 public class Main {
@@ -28,18 +34,63 @@ public class Main {
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
 		//emailMe();
+		Connection conn = getConnection();
 		String[] schemas = new String[]{"sftest1","sfprod"};
-		
+		TreeMap<String, Department> apiMap = getAPIdepts();
 		for(String schema: schemas){
 			current_schema = schema;
-			Departments depts = new Departments(schema);
+			writeLog(" STATUS=STARTING_SCHEMA");
+			Departments depts = new Departments(schema,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
-			
+			writeLog(" STATUS=FINISHED_SCHEMA");
 		}
 		
+		conn.close();
 		
-		
+	}
+	
+	
+	public static  TreeMap<String, Department> getAPIdepts(){
+		TreeMap<String, Department> apiMap = new TreeMap<String, Department>();
+		Main.writeLog(" TASK=LOAD_API_DATA STATUS=STARTING");
+		try {
+			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
+					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
+					  .header("client_id", "6bf28c0fe7f74a3abefddef2c49d9c37")
+					  .header("client_secret", "9d1b04d804734133810FDA06CC41C163")
+					  .header("cache-control", "no-cache")
+					  .header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
+					  .asString();
+			
+			JSONObject responeJson = new JSONObject(response.getBody());
+            int listSize = responeJson.getJSONObject("metadata").getInt("size");
+			
+           
+            JSONArray jsonArray = responeJson.getJSONArray("items");
+
+            
+            for (int i=0;i<jsonArray.length();i++){
+            	apiMap.put(jsonArray.getJSONObject(i).getString("orgUnitId"), 
+            			new Department(jsonArray.getJSONObject(i).getString("orgUnitId"),
+            					jsonArray.getJSONObject(i).getString("name") )
+            			);
+            	
+            	//System.out.println("orgUnitId : "+jsonArray.getJSONObject(i).getString("orgUnitId"));
+                //System.out.println("name : "+jsonArray.getJSONObject(i).getString("name"));
+            }
+            Main.writeLog(" TASK=LOAD_API_DATA COUNT=" + listSize);
+            if(apiMap.size() != listSize){
+            	Main.writeLog(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
+            	System.exit(1);
+            }
+			
+		} catch (UnirestException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		Main.writeLog(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
+		return apiMap;
 	}
 	
 	public static void emailMe() {
@@ -98,6 +149,16 @@ public class Main {
 	
 	public static void writeLog(String whatToWrite){
 		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite);
+	}
+	
+	public static void writeLog(Department dept, String whatToWrite){
+		String orgUnitID = dept.getOrgUnitID();
+		String Name = dept.getName();
+		String sfID = dept.getSfID();
+		
+		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite);
+		
+		
 	}
 	
 }//end of class

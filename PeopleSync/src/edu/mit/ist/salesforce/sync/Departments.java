@@ -11,10 +11,6 @@ import java.util.TreeMap;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.mashape.unirest.http.HttpResponse;
-import com.mashape.unirest.http.Unirest;
-import com.mashape.unirest.http.exceptions.UnirestException;
-
 public class Departments {
 	
 	public static final String SF_ACCOUNTS_SQL = "select * from <schema>.account where from_api__c = true and active__c = true and orgunitid__c is not null";
@@ -33,10 +29,11 @@ public class Departments {
 	TreeMap<String, Department> sfMap;
 	TreeMap<String, Department> addMap;
 	Connection conn;
+	boolean updateSF;
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		Departments me = new Departments("sftest1");
-		me.loadAPIdepts();
+		Departments me = new Departments("sftest1", Main.getAPIdepts(), Main.getConnection());
+		
 		System.out.println("\n\n------ API Map ------\n\n");
 		System.out.print(listDepts(me.apiMap));
 		
@@ -46,75 +43,41 @@ public class Departments {
 		//TryThisAtHome();
 	}
 	
+	public Departments(String schema, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
+		 this(schema,apiMap,conn,true);
+		
+	}
 	
-	public Departments(String schema) throws URISyntaxException, SQLException{
+	public Departments(String schema, TreeMap<String, Department> apiMap, Connection conn, boolean updateSF) throws URISyntaxException, SQLException{
 		this.schema = schema;
-		conn = Main.getConnection();
-		apiMap  = new TreeMap<String, Department>();
+		this.conn = conn;
+		this.updateSF = updateSF;
+		this.apiMap  = apiMap;
 		sfMap   = new TreeMap<String, Department>();
 		addMap  = new TreeMap<String, Department>();
 		
 	}
 	
 	public void loadData(){
-		loadAPIdepts();
+		
 		loadSFdepts();
 	}
 	
 	public void CompareUpdate(){
 		compareMaps();
-		deactivateDepts();
-		insertDepts();
-		updateDepts();
-		try {
-			conn.close();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		if(updateSF){
+			deactivateDepts();
+			insertDepts();
+			updateDepts();
+		}else{
+			Main.writeLog(" STATUS=NOT_UPDATING_SF");
 		}
+		
+		
 	}
 		
 
-	private  void loadAPIdepts(){
-
-		Main.writeLog(" TASK=LOAD_API_DATA STATUS=STARTING");
-		try {
-			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
-					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
-					  .header("client_id", "6bf28c0fe7f74a3abefddef2c49d9c37")
-					  .header("client_secret", "9d1b04d804734133810FDA06CC41C163")
-					  .header("cache-control", "no-cache")
-					  .header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
-					  .asString();
-			
-			JSONObject responeJson = new JSONObject(response.getBody());
-            int listSize = responeJson.getJSONObject("metadata").getInt("size");
-			
-           
-            JSONArray jsonArray = responeJson.getJSONArray("items");
-
-            
-            for (int i=0;i<jsonArray.length();i++){
-            	apiMap.put(jsonArray.getJSONObject(i).getString("orgUnitId"), 
-            			new Department(jsonArray.getJSONObject(i).getString("orgUnitId"),
-            					jsonArray.getJSONObject(i).getString("name") )
-            			);
-            	
-            	//System.out.println("orgUnitId : "+jsonArray.getJSONObject(i).getString("orgUnitId"));
-                //System.out.println("name : "+jsonArray.getJSONObject(i).getString("name"));
-            }
-            Main.writeLog(" TASK=LOAD_API_DATA COUNT=" + listSize);
-            if(apiMap.size() != listSize){
-            	Main.writeLog(" TASK=LOAD_API_DATA STATUS=ERROR");
-            	System.exit(1);
-            }
-			
-		} catch (UnirestException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		Main.writeLog(" TASK=LOAD_API_DATA STATUS=FINISHED");
-	}
+	
 	
 	
 	private  void loadSFdepts(){
@@ -133,12 +96,12 @@ public class Departments {
 			
 			readRS.close();
 			readPS.close();
-			Main.writeLog(" TASK=LOAD_SF_DATA COUNT=" + sfMap.size());
+			
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		Main.writeLog(" TASK=LOAD_SF_DATA STATUS=FINISHED");
+		Main.writeLog(" TASK=LOAD_SF_DATA STATUS=FINISHED COUNT=" + sfMap.size());
 	}
 	
 	
@@ -158,11 +121,13 @@ public class Departments {
 					sfMap.remove(apiID);
 				}else{
 					//set sfID for the dept so we can use it to update later
+					Main.writeLog(sfDept, " STATUS=DIFFERENCE_FOUND API_NAME=\"" + apiDept.getName() + "\"");
 					apiDept.setSfID(sfMap.get(apiID).getSfID());
 					sfMap.remove(apiID);
 				}
 			}else{
 				//there is not an entry in SF, NEW ACCOUNT
+				Main.writeLog(apiDept, " STATUS=NEW_ITEM_FOUND");
 				addMap.put(apiID, apiDept);
 				it.remove();
 			}
@@ -180,13 +145,14 @@ public class Departments {
 			while(it.hasNext()){
 				updatedCount++;
 				String thisID = it.next();
+				Department thisDept = sfMap.get(thisID);
 				removePS.clearParameters();
-				removePS.setString(1, sfMap.get(thisID).getSfID());
+				removePS.setString(1, thisDept.getSfID());
 				int numUpdated = removePS.executeUpdate();
 				if(numUpdated == 1){
-					Main.writeLog(" TASK=DEACTIVATING_ACCOUNT STATUS=SUCCESS ORGUNITID=" + thisID);
+					Main.writeLog(thisDept," TASK=DEACTIVATING_ACCOUNT STATUS=SUCCESS ");
 				}else{
-					Main.writeLog(" TASK=DEACTIVATING_ACCOUNT STATUS=ERROR ORGUNITID=" + thisID + " UPDATE_COUNT=" + numUpdated);
+					Main.writeLog(thisDept," TASK=DEACTIVATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
 				}
 				
 			}
@@ -209,35 +175,36 @@ public class Departments {
 			while(it.hasNext()){
 				updatedCount ++;
 				String thisID = it.next();
-				String thisName = addMap.get(thisID).getName();
+				Department thisDept = addMap.get(thisID);
+				String thisName = thisDept.getName();
 				insertPS.clearParameters();
 				int c =1;
 				insertPS.setString(c++, thisName);
 				insertPS.setString(c++, thisID);
 				int numUpdated = insertPS.executeUpdate();
 				if(numUpdated == 1){
-					Main.writeLog(" TASK=INSERTING_ACCOUNT STATUS=SUCCESS ORGUNITID=" + thisID);
+					Main.writeLog(thisDept, " TASK=INSERTING_ACCOUNT STATUS=SUCCESS ");
 				}else{
-					Main.writeLog(" TASK=INSERTING_ACCOUNT STATUS=ERROR ORGUNITID=" + thisID + " UPDATE_COUNT=" + numUpdated);
+					Main.writeLog(thisDept, " TASK=INSERTING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
 				}
 			}
 			insertPS.close();
-			Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 			
 		}catch(SQLException ex){
 			Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=EXCEPTION");
 			ex.printStackTrace();
 		}
-		Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED");
+		Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 		
 	}
 	
 	private void updateDepts(){
 		Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
+		int updatedCount = 0;
 		try{
 			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL.replace("<schema>", schema));
 			Iterator<String> it = apiMap.keySet().iterator();
-			int updatedCount = 0;
+			
 			while(it.hasNext()){
 				updatedCount ++;
 				String thisID = it.next();
@@ -250,9 +217,9 @@ public class Departments {
 				updatePS.setString(c++, thisSFid);
 				int numUpdated = updatePS.executeUpdate();
 				if(numUpdated == 1){
-					Main.writeLog(" TASK=UPDATING_ACCOUNT STATUS=SUCCESS ORGUNITID=" + thisID + " SFID=" + thisSFid );
+					Main.writeLog(thisDept," TASK=UPDATING_ACCOUNT STATUS=SUCCESS " );
 				}else{
-					Main.writeLog(" TASK=UPDATING_ACCOUNT STATUS=ERROR ORGUNITID=" + thisID + " SFID=" + thisSFid + " UPDATE_COUNT=" + numUpdated);
+					Main.writeLog(thisDept," TASK=UPDATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
 				}
 			}
 			updatePS.close();
@@ -260,7 +227,7 @@ public class Departments {
 			Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION");
 			ex.printStackTrace();
 		}
-		Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED");
+		Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 	}
 	
 	public static String listDepts(TreeMap<String, Department> thisMap){
