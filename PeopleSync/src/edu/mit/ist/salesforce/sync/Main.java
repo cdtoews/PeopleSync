@@ -33,7 +33,10 @@ public class Main {
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		//emailMe();
+		emailMe();
+		if(true){
+			System.exit(0);
+		}
 		Connection conn = getConnection();
 		String[] schemas = new String[]{"sftest1","sfprod"};
 		TreeMap<String, Department> apiMap = getAPIdepts();
