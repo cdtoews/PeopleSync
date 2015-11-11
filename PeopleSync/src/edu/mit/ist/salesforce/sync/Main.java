@@ -58,7 +58,7 @@ public class Main {
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
 		//emailMe();
-		
+		//Small change
 		//let's get our home schema
 		home_schema = System.getenv("HOME_SCHEMA");
 		
