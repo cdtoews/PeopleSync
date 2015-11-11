@@ -32,6 +32,7 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 public class Main {
 
 	public static String current_schema = "INITIALIZING";
+	public static String home_schema = "INITIALIZING";
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
@@ -58,12 +59,15 @@ public class Main {
 	public static void main(String[] args) throws URISyntaxException, SQLException{
 		//emailMe();
 		
+		//let's get our home schema
+		home_schema = System.getenv("HOME_SCHEMA");
+		
 		HashSet<Properties> propSet = new HashSet<Properties>();
 		
 		Connection conn = getConnection();
 		
 		//first let's iterate over dept_sync__c table
-		PreparedStatement syncListPS = conn.prepareStatement("select * from sfdev1.dept_sync__c where sync_active__c = true");
+		PreparedStatement syncListPS = conn.prepareStatement("select * from " + home_schema + ".dept_sync__c where sync_active__c = true");
 		ResultSet syncListRS = syncListPS.executeQuery();
 		while(syncListRS.next()){
 			//let's load up a properties object for each record
@@ -128,7 +132,7 @@ public class Main {
 					  .header("client_id", "6bf28c0fe7f74a3abefddef2c49d9c37")
 					  .header("client_secret", "9d1b04d804734133810FDA06CC41C163")
 					  .header("cache-control", "no-cache")
-					  .header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
+					  //.header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
 					  .asString();
 			
 			JSONObject responeJson = new JSONObject(response.getBody());
