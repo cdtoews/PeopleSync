@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Iterator;
+import java.util.Properties;
 import java.util.TreeMap;
 
 import org.json.JSONArray;
@@ -13,17 +14,21 @@ import org.json.JSONObject;
 
 public class Departments {
 	
-	public static final String SF_ACCOUNTS_SQL = "select * from <schema>.account where from_api__c = true and active__c = true and orgunitid__c is not null";
-	public static final String SF_DEACTIVEATE_ACCOUNT_SQL = "update <schema>.account set active__c = false, inactive_date__c = current_date where sfid = ?";
-	public static final String INSERT_ACCOUNT_SQL = 
-												"insert into <schema>.account \n" +
-												"(name,orgunitid__c, active_date__c, active__c, from_api__c) \n" +
+	public static final String SF_ACCOUNTS_SQL_BASE = "select * from <name>.<object_name__c> where <from_api_field__c> = true and <active_field__c> = true and <orgunitid_field__c> is not null";
+	String SF_ACCOUNTS_SQL;
+	public static final String SF_DEACTIVEATE_ACCOUNT_SQL_BASE = "update <name>.<object_name__c> set <active_field__c> = false, <inactive_date_field__c> = current_date where sfid = ?";
+	String SF_DEACTIVEATE_ACCOUNT_SQL;
+	public static final String INSERT_ACCOUNT_SQL_BASE = 
+												"insert into <name>.<object_name__c> \n" +
+												"(<name_field__c>,<orgunitid_field__c>, <active_date_field__c>, <active_field__c>, <from_api_field__c>) \n" +
 												"values \n" +
 												"(?, ?, current_date, true, true) \n";
-	
-	public static final String UPDATE_ACCOUNT_SQL = "update <schema>.account set name = ? where sfid like ?";
+	String INSERT_ACCOUNT_SQL;
+	public static final String UPDATE_ACCOUNT_SQL_BASE = "update <name>.<object_name__c> set <name_field__c> = ? where sfid = ?";
+	String UPDATE_ACCOUNT_SQL;
 	
 	String schema;
+	Properties props;
 	
 	TreeMap<String, Department> apiMap ;
 	TreeMap<String, Department> sfMap;
@@ -32,31 +37,52 @@ public class Departments {
 	boolean updateSF;
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		Departments me = new Departments("sftest1", Main.getAPIdepts(), Main.getConnection());
+		//Departments me = new Departments("sftest1", Main.getAPIdepts(), Main.getConnection());
 		
-		System.out.println("\n\n------ API Map ------\n\n");
-		System.out.print(listDepts(me.apiMap));
+		//System.out.println("\n\n------ API Map ------\n\n");
+		//System.out.print(listDepts(me.apiMap));
 		
-		me.loadSFdepts();
-		System.out.println("\n\n------ SF  Map ------\n\n");
-		System.out.print(listDepts(me.sfMap));
+		//me.loadSFdepts();
+		//System.out.println("\n\n------ SF  Map ------\n\n");
+		//System.out.print(listDepts(me.sfMap));
 		//TryThisAtHome();
 	}
 	
-	public Departments(String schema, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
-		 this(schema,apiMap,conn,true);
-		
-	}
+
 	
-	public Departments(String schema, TreeMap<String, Department> apiMap, Connection conn, boolean updateSF) throws URISyntaxException, SQLException{
-		this.schema = schema;
+	public Departments(Properties props, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
+		this.props = props;
+		this.schema = this.props.getProperty("name");
 		this.conn = conn;
-		this.updateSF = updateSF;
+		
+		//let's populate updateSF
+		String updateSFtext = props.getProperty("update_salesforce__c");
+		if(updateSFtext != null && updateSFtext.toLowerCase().equals("t")){
+			updateSF = true;
+		}else{
+			updateSF = false;
+		}
+		
 		this.apiMap  = apiMap;
 		sfMap   = new TreeMap<String, Department>();
 		addMap  = new TreeMap<String, Department>();
+		//make my queries specific to this instance
+		SF_ACCOUNTS_SQL = replaceProps(SF_ACCOUNTS_SQL_BASE);
+		SF_DEACTIVEATE_ACCOUNT_SQL = replaceProps(SF_DEACTIVEATE_ACCOUNT_SQL_BASE);
+		INSERT_ACCOUNT_SQL = replaceProps(INSERT_ACCOUNT_SQL_BASE);
+		UPDATE_ACCOUNT_SQL = replaceProps(UPDATE_ACCOUNT_SQL_BASE);
+	}
+	
+	
+	private  String replaceProps(String input){
+		String output = input;
+		for(String eachProp:Main.SYNC_PROPERTIES){
+			output = output.replace("<" + eachProp + ">", this.props.getProperty(eachProp));
+		}
+		return output;
 		
 	}
+	
 	
 	public void loadData(){
 		
@@ -83,7 +109,7 @@ public class Departments {
 	private  void loadSFdepts(){
 		try {
 			Main.writeLog(" TASK=LOAD_SF_DATA STATUS=STARTING");
-			PreparedStatement readPS = conn.prepareStatement(SF_ACCOUNTS_SQL.replace("<schema>", schema));
+			PreparedStatement readPS = conn.prepareStatement(SF_ACCOUNTS_SQL);
 			ResultSet readRS = readPS.executeQuery();
 			while(readRS.next()){
 				//System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
@@ -139,7 +165,7 @@ public class Departments {
 	private void deactivateDepts() {
 		Main.writeLog(" TASK=DEACTIVATING_ACCOUNTS STATUS=STARTING");
 		try {
-			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL.replace("<schema>", schema));
+			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL);
 			Iterator<String> it = sfMap.keySet().iterator();
 			int updatedCount = 0;
 			while(it.hasNext()){
@@ -170,7 +196,7 @@ public class Departments {
 		Main.writeLog(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
 		int updatedCount = 0;
 		try{
-			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL.replace("<schema>", schema));
+			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL);
 			Iterator<String> it = addMap.keySet().iterator();
 			while(it.hasNext()){
 				updatedCount ++;
@@ -202,7 +228,7 @@ public class Departments {
 		Main.writeLog(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
 		int updatedCount = 0;
 		try{
-			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL.replace("<schema>", schema));
+			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL);
 			Iterator<String> it = apiMap.keySet().iterator();
 			
 			while(it.hasNext()){

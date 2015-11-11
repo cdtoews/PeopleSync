@@ -4,9 +4,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Properties;
 import java.util.TreeMap;
 
@@ -32,23 +35,85 @@ public class Main {
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
+	public static final String[] SYNC_PROPERTIES = new String[]{
+																"log_archive_days__c"
+																,"log_text_field__c"
+																,"orgunitid_field__c"
+																,"from_api_field__c"
+																,"log_object_name__c"
+																,"sfid"
+																,"name"
+																,"log_datetime_field__c"
+																,"name_field__c"
+																,"object_name__c"
+																,"active_date_field__c"
+																,"active_field__c"
+																,"inactive_date_field__c"
+																,"sync_active__c"
+																,"update_salesforce__c"
+																};
+	
+	
+	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
-		emailMe();
-		if(true){
-			System.exit(0);
-		}
+		//emailMe();
+		
+		HashSet<Properties> propSet = new HashSet<Properties>();
+		
 		Connection conn = getConnection();
-		String[] schemas = new String[]{"sftest1","sfprod"};
+		
+		//first let's iterate over dept_sync__c table
+		PreparedStatement syncListPS = conn.prepareStatement("select * from sfdev1.dept_sync__c where sync_active__c = true");
+		ResultSet syncListRS = syncListPS.executeQuery();
+		while(syncListRS.next()){
+			//let's load up a properties object for each record
+			Properties thisProp = new Properties();
+			for(String syncProp:SYNC_PROPERTIES){
+				
+				thisProp.put(syncProp, syncListRS.getString(syncProp));
+			}
+			propSet.add(thisProp);
+		}//end of while syncListRS.next
+		
+		syncListRS.close();
+		syncListPS.close();
+		//load API data once
 		TreeMap<String, Department> apiMap = getAPIdepts();
-		for(String schema: schemas){
-			current_schema = schema;
+		
+		for(Properties eachProp:propSet){
+			//System.out.println("---------start properties---------------");
+			//for(String syncProp:SYNC_PROPERTIES){
+			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
+			//}
+			current_schema = eachProp.getProperty("name");
 			writeLog(" STATUS=STARTING_SCHEMA");
-			Departments depts = new Departments(schema,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
+			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
 			writeLog(" STATUS=FINISHED_SCHEMA");
-		}
+			
+		}//end of looping through properties (sync sets)
 		
+		
+		
+		
+		
+//		System.exit(0);
+//		
+//		
+//		
+//		
+//		String[] schemas = new String[]{"sftest1","sfprod"};
+//		//TreeMap<String, Department> apiMap = getAPIdepts();
+//		for(String schema: schemas){
+//			current_schema = schema;
+//			writeLog(" STATUS=STARTING_SCHEMA");
+//			Departments depts = new Departments(schema,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
+//			depts.loadData();
+//			depts.CompareUpdate();
+//			writeLog(" STATUS=FINISHED_SCHEMA");
+//		}
+//		
 		conn.close();
 		
 	}
