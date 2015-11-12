@@ -63,11 +63,13 @@ public class Departments {
 
 	
 	public Departments(Properties props, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
+		
+		myLog = "";
 		logThis( " STATUS=STARTING_SCHEMA " + Main.getEnvInfo() );
 		this.props = props;
 		this.schema = this.props.getProperty("name");
 		this.conn = conn;
-		myLog = "";
+		
 		
 		//let's populate updateSF
 		String updateSFtext = props.getProperty("update_salesforce__c");
