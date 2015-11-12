@@ -31,8 +31,9 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class Main {
 
+	Connection conn;
 	public static String current_schema = "INITIALIZING";
-	public static String home_schema = "INITIALIZING";
+	public String home_schema = "INITIALIZING";
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	
@@ -55,17 +56,29 @@ public class Main {
 																};
 	
 	
+	public static final String RECORD_LOG_SQL = "update <home_schema>.dept_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
+	
+	public Main() throws URISyntaxException, SQLException{
+		conn = getConnection();
+		//let's get our home schema
+		home_schema = System.getenv("HOME_SCHEMA");
+	}
+	
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
+		Main me = new Main();
+		me.run();
+	}
+	
+	public  void run() throws URISyntaxException, SQLException{
 		//emailMe();
 		//Small change
 		//added in dummy1
-		//let's get our home schema
-		home_schema = System.getenv("HOME_SCHEMA");
+		
 		
 		HashSet<Properties> propSet = new HashSet<Properties>();
 		
-		Connection conn = getConnection();
+		
 		
 		//first let's iterate over dept_sync__c table
 		PreparedStatement syncListPS = conn.prepareStatement("select * from " + home_schema + ".dept_sync__c where sync_active__c = true");
@@ -85,6 +98,10 @@ public class Main {
 		//load API data once
 		TreeMap<String, Department> apiMap = getAPIdepts();
 		
+		
+		//-------------------------------------------
+		//------------ Main work loop ---------------
+		//-------------------------------------------
 		for(Properties eachProp:propSet){
 			//System.out.println("---------start properties---------------");
 			//for(String syncProp:SYNC_PROPERTIES){
@@ -95,38 +112,22 @@ public class Main {
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
+			recordLog(depts.getMyLog(Departments.MAX_LOG_SIZE),eachProp.getProperty("sfid"));
 			writeLog(" STATUS=FINISHED_SCHEMA");
 			
 		}//end of looping through properties (sync sets)
 		
 		
 		
-		
-		
-//		System.exit(0);
-//		
-//		
-//		
-//		
-//		String[] schemas = new String[]{"sftest1","sfprod"};
-//		//TreeMap<String, Department> apiMap = getAPIdepts();
-//		for(String schema: schemas){
-//			current_schema = schema;
-//			writeLog(" STATUS=STARTING_SCHEMA");
-//			Departments depts = new Departments(schema,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
-//			depts.loadData();
-//			depts.CompareUpdate();
-//			writeLog(" STATUS=FINISHED_SCHEMA");
-//		}
-//		
+
 		conn.close();
 		
-	}
+	}//end of run
 	
 	
 	public static  TreeMap<String, Department> getAPIdepts(){
 		TreeMap<String, Department> apiMap = new TreeMap<String, Department>();
-		Main.writeLog(" TASK=LOAD_API_DATA STATUS=STARTING");
+		writeLog(" TASK=LOAD_API_DATA STATUS=STARTING");
 		try {
 			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
 					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
@@ -152,9 +153,9 @@ public class Main {
             	//System.out.println("orgUnitId : "+jsonArray.getJSONObject(i).getString("orgUnitId"));
                 //System.out.println("name : "+jsonArray.getJSONObject(i).getString("name"));
             }
-            Main.writeLog(" TASK=LOAD_API_DATA COUNT=" + listSize);
+            writeLog(" TASK=LOAD_API_DATA COUNT=" + listSize);
             if(apiMap.size() != listSize){
-            	Main.writeLog(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
+            	writeLog(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
             	System.exit(1);
             }
 			
@@ -162,9 +163,31 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		Main.writeLog(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
+		writeLog(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
 		return apiMap;
 	}
+	
+	private void recordLog(String logText, String sfID){
+		writeLog(" TASK=RECORDING_LOG STATUS=STARTING");
+		try{
+			PreparedStatement recordPS = conn.prepareStatement(RECORD_LOG_SQL.replace("<home_schema>", home_schema));
+			int c=1;
+			recordPS.setString(c++, logText);
+			recordPS.setString(c++, sfID);
+			Integer numUpdated = recordPS.executeUpdate();
+			if(numUpdated != null && numUpdated == 1){
+				writeLog(" TASK=RECORDING_LOG STATUS=SUCCESS");
+			}else{
+				writeLog(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
+			}
+		}catch(SQLException ex){
+			writeLog(" TASK=RECORDING_LOG STATUS=EXCEPTION");
+		}
+		
+		writeLog(" TASK=RECORDING_LOG STATUS=FINISHED");
+		
+	}
+	
 	
 	public static void emailMe() {
 		 		
@@ -220,17 +243,19 @@ public class Main {
 	}
 	
 	
-	public static void writeLog(String whatToWrite){
-		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite);
+	public static String writeLog(String whatToWrite){
+		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;
+		System.out.println(result);
+		return result;
 	}
 	
-	public static void writeLog(Department dept, String whatToWrite){
+	public static String writeLog(Department dept, String whatToWrite){
 		String orgUnitID = dept.getOrgUnitID();
 		String Name = dept.getName();
 		String sfID = dept.getSfID();
-		
-		System.out.println(DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite);
-		
+		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite;
+		System.out.println(result);
+		return result;
 		
 	}
 	
