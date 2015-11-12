@@ -264,6 +264,7 @@ public class Main {
 	public static String getEnvInfo(){
 		String result = "";
 		result += " JAVA_VERSION=\"" + System.getProperty("java.version") + "\" ";
+		result += " DYNO=" + System.getenv("DYNO");
 		try {
 			result += " HOSTNAME=" + InetAddress.getLocalHost().getHostName() + " ";
 		} catch (UnknownHostException e) {
