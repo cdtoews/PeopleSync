@@ -1,7 +1,9 @@
 package edu.mit.ist.salesforce.sync;
 
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -108,7 +110,7 @@ public class Main {
 			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
 			//}
 			current_schema = eachProp.getProperty("name");
-			writeLog(" STATUS=STARTING_SCHEMA");
+			//writeLog(" STATUS=STARTING_SCHEMA");
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
@@ -257,6 +259,18 @@ public class Main {
 		System.out.println(result);
 		return result;
 		
+	}
+	
+	public static String getEnvInfo(){
+		String result = "";
+		result += " JAVA_VERSION=\"" + System.getProperty("java.version") + "\" ";
+		try {
+			result += " HOSTNAME=" + InetAddress.getLocalHost().getHostName() + " ";
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			result += " HOSTNAME=UNKNOWN ";
+		}
+		return result;
 	}
 	
 }//end of class

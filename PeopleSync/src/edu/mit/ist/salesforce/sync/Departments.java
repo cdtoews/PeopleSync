@@ -63,6 +63,7 @@ public class Departments {
 
 	
 	public Departments(Properties props, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
+		logThis( " STATUS=STARTING_SCHEMA " + Main.getEnvInfo() );
 		this.props = props;
 		this.schema = this.props.getProperty("name");
 		this.conn = conn;
@@ -126,13 +127,16 @@ public class Departments {
 	private  void loadSFdepts(){
 		try {
 			logThis(" TASK=LOAD_SF_DATA STATUS=STARTING");
+			String OrgIDField = props.getProperty("orgunitid_field__c");
+			String nameField = props.getProperty("name_field__c");
+			
 			PreparedStatement readPS = conn.prepareStatement(SF_ACCOUNTS_SQL);
 			ResultSet readRS = readPS.executeQuery();
 			while(readRS.next()){
 				//System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
-				sfMap.put(readRS.getString("orgunitid__c"), 
-            			new Department(readRS.getString("orgunitid__c"),
-            				readRS.getString("name"),
+				sfMap.put(readRS.getString(OrgIDField), 
+            			new Department(readRS.getString(OrgIDField),
+            				readRS.getString(nameField),
             				readRS.getString("sfid"))
             			);
 			}
