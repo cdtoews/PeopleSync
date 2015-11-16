@@ -14,7 +14,7 @@ import org.json.JSONObject;
 
 public class Departments {
 	
-	public static final Integer MAX_LOG_SIZE = 130000;
+	
 	
 	public static final String SF_ACCOUNTS_SQL_BASE = "select * from <name>.<object_name__c> where <from_api_field__c> = true and <active_field__c> = true and <orgunitid_field__c> is not null";
 	String SF_ACCOUNTS_SQL;
@@ -94,7 +94,7 @@ public class Departments {
 	
 	private  String replaceProps(String input){
 		String output = input;
-		for(String eachProp:Main.SYNC_PROPERTIES){
+		for(String eachProp:Main.DEPT_SYNC_PROPERTIES){
 			output = output.replace("<" + eachProp + ">", this.props.getProperty(eachProp));
 		}
 		return output;
@@ -334,7 +334,7 @@ public class Departments {
 	private void writeLog(){
 		logThis(" TASK=WRITING_LOG STATUS=STARTING");
 		//just in case we get a ginormous log
-		String toWrite = getMyLog(MAX_LOG_SIZE);
+		String toWrite = getMyLog(Main.MAX_LOG_SIZE);
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logThis(" TASK=WRITING_LOG STATUS=SKIPPING");
@@ -439,7 +439,7 @@ public class Departments {
 
 	public String getMyLog(int sizeLimit){
 		String result = myLog;
-		if(result.length() > MAX_LOG_SIZE){
+		if(result.length() > Main.MAX_LOG_SIZE){
 			result = result.substring(0, sizeLimit);
 		}
 		return result;

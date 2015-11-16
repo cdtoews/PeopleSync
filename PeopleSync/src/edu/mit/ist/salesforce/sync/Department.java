@@ -1,5 +1,7 @@
 package edu.mit.ist.salesforce.sync;
 
+import java.util.Iterator;
+
 //class for holding department info
 
 public class Department {
@@ -48,6 +50,17 @@ public class Department {
 		this.sfID = sfID;
 	}
 	
-	
+	public String toString(){
+		String cr = "\n";
+		String prefix = "\t\t";
+		String result = prefix + "----- Department -----" + cr;
+		result += prefix + "sfID = " + sfID + cr;
+		result += prefix + "orgUnitID = " + orgUnitID + cr;
+		result += prefix + "Name = " + Name + cr;
+		
+		
+		
+		return result;
+	}
 	
 }

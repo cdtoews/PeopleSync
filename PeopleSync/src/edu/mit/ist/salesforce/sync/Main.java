@@ -38,15 +38,16 @@ public class Main {
 	public String home_schema = "INITIALIZING";
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
+	public static final Integer MAX_LOG_SIZE = 130000;
 	
-	public static final String[] SYNC_PROPERTIES = new String[]{
+	public static final String[] DEPT_SYNC_PROPERTIES = new String[]{
 																"log_archive_days__c"
 																,"log_text_field__c"
 																,"orgunitid_field__c"
 																,"from_api_field__c"
 																,"log_object_name__c"
 																,"sfid"
-																,"name"
+																,"name" //schema name
 																,"log_datetime_field__c"
 																,"name_field__c"
 																,"object_name__c"
@@ -57,6 +58,51 @@ public class Main {
 																,"update_salesforce__c"
 																};
 	
+	
+	public static final String[] PEOPLE_SYNC_PROPERTIES = new String[]{
+		"schema_name__c" //name of schema in Heroku Connect
+		,"sync_active__c" //is this item active,
+		,"update_salesforce__c" // should this item update salesforce
+		//------- Log -----------
+		,"log_object_name__c" //name of object to hold person sync logs
+		,"log_text_field__c"  //text(long) 131,000 field for holding the last sync log
+		,"log_datetime_field__c" //datetime field to hold sync datetime
+		,"log_archive_days__c" //how long until the logs are deleted (-1 to never delete)
+		//------- Person -----------
+		,"person_object_name__c" //object name for person object
+		,"person_kerb_id_field__c" 
+		,"person_first_name_field__c"
+		,"person_middle_name_field__c"
+		,"person_last_name_field__c"
+		,"person_email_field__c"
+		,"person_phone_number_field__c"
+		,"person_website_field__c"
+		,"person_log_changes" //should the sync update field on person object of changes
+		,"person_update_notes_field__c"//optional field for log of person changes
+		,"person_from_api_field__c" //checkbox used to designate if 'person' is from API
+		,"person_active_field__c" //checkbox marked false when person not active in API
+		,"person_active_date_field__c" //date field populated on first sync. not used if sync not populating SF
+		,"person_inactive_date_field__c" //date field populated when kerbID not active in API
+		//------- affiliation -----------
+		,"affiliation_object_name__c"
+		,"affiliation_type_field__c"
+		,"affiliation_office_field__c"
+		,"affiliation_person_lookup_field__c"
+		,"affiliation_from_api_field__c"
+		,"affiliation_active_field__c"
+		,"affiliation_active_date_field__c"
+		,"affiliation_inactive_date_field__c"
+		//-------- Dept_Affiliation -----------
+		,"deptaff_object_name__c"
+		,"deptaff_orgunit_id_field__c"
+		,"deptaff_name_field__c"
+		,"deptaff_affiliation_lookup_field__c"
+		,"deptaff_department_lookup_field__c"
+		,"deptaff_from_api_field__c"
+		,"deptaff_active_field__c"
+		,"deptaff_active_date_field__c"
+		,"deptaff_inactive_date_field__c"
+			};
 	
 	public static final String RECORD_LOG_SQL = "update <home_schema>.dept_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
 	
@@ -88,7 +134,7 @@ public class Main {
 		while(syncListRS.next()){
 			//let's load up a properties object for each record
 			Properties thisProp = new Properties();
-			for(String syncProp:SYNC_PROPERTIES){
+			for(String syncProp:DEPT_SYNC_PROPERTIES){
 				
 				thisProp.put(syncProp, syncListRS.getString(syncProp));
 			}
@@ -114,7 +160,7 @@ public class Main {
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
-			recordLog(depts.getMyLog(Departments.MAX_LOG_SIZE),eachProp.getProperty("sfid"));
+			recordLog(depts.getMyLog(MAX_LOG_SIZE),eachProp.getProperty("sfid"));
 			writeLog(" STATUS=FINISHED_SCHEMA");
 			
 		}//end of looping through properties (sync sets)
