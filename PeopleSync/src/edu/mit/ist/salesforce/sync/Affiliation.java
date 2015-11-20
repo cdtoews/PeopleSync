@@ -5,11 +5,11 @@ import java.util.TreeMap;
 
 public class Affiliation {
 
-	String type;
-	String title;
-	String office;
-	String sfID;
-	TreeMap<String, Department> depts;
+	private String type;
+	private String title;
+	private String office;
+	private String sfID;
+	private TreeMap<String, DeptAff> depts;//orgunitid,deptaff
 	
 	
 	public Affiliation(String type, String title, String office) {
@@ -17,7 +17,7 @@ public class Affiliation {
 		this.title = title;
 		this.office = office;
 		this.sfID = null;
-		depts = new TreeMap<String, Department>();
+		depts = new TreeMap<String, DeptAff>();
 	}
 
 	
@@ -28,7 +28,7 @@ public class Affiliation {
 		this.title = title;
 		this.office = office;
 		this.sfID = sfID;
-		depts = new TreeMap<String, Department>();
+		depts = new TreeMap<String, DeptAff>();//orgunitID, deptAff
 	}
 
 
@@ -48,30 +48,43 @@ public class Affiliation {
 
 
 
-	public void addDept(Department dept){
-		if(dept != null){
-			depts.put(dept.getOrgUnitID(), dept);
+	public void addDept(DeptAff deptAff){
+		if(deptAff != null){
+			depts.put(deptAff.getOrgUnitID(), deptAff);
 		}
 		
 	}
 	
 
 	public String getType() {
-		return type;
+		if(type == null){
+			return "";
+		}else{
+			return type;
+		}
+		
 	}
 
 
 	public String getTitle() {
-		return title;
+		if(title == null){
+			return "";
+		}else{
+			return title;
+		}
 	}
 
 
 	public String getOffice() {
-		return office;
+		if(office == null){
+			return "";
+		}else{
+			return office;
+		}
 	}
 
 
-	public TreeMap<String, Department> getDepts() {
+	public TreeMap<String, DeptAff> getDeptAffs() {
 		return depts;
 	}
 	
@@ -87,13 +100,41 @@ public class Affiliation {
 		Iterator<String> it  = depts.keySet().iterator();
 		while(it.hasNext()){
 			String orgUnitID = it.next();
-			Department eachDept = depts.get(orgUnitID);
+			DeptAff eachDept = depts.get(orgUnitID);
 			result += eachDept.toString();
 		}
 		
 		
 		return result;
 	}
+	
+	public boolean equalValues(Affiliation other){
+		if(
+				this.getType().equals(other.getType())
+				&& this.getTitle().equals(other.getTitle())
+				&& this.getOffice().equals(other.getOffice())
+				&& this.getDeptAffs().equals(other.getDeptAffs())
+				){
+			return true;
+		}else{
+			return false;
+		}
+		
+	}//end of equalValues
+	
+	public boolean almostEqualValues(Affiliation other){
+		if(
+				this.getType().equals(other.getType())
+				&& this.getTitle().equals(other.getTitle())
+				// && this.getOffice().equals(other.getOffice())
+				&& this.getDeptAffs().equals(other.getDeptAffs())
+				){
+			return true;
+		}else{
+			return false;
+		}
+		
+	}//end of equalValues
 	
 	
 }

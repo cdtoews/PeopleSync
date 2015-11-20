@@ -63,4 +63,7 @@ public class Department {
 		return result;
 	}
 	
+	public String quickinfo(){
+		return  " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " ";
+	}
 }

@@ -1,6 +1,21 @@
 package edu.mit.ist.salesforce.sync;
 
+import java.net.URISyntaxException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Properties;
+import java.util.TreeMap;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.mashape.unirest.http.HttpResponse;
@@ -8,8 +23,192 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class Persons {
+	static final Logger logger = LogManager.getLogger(Persons.class.getName());
+	
+	private Connection conn;
 
-	String myLog;
+	private HashMap<String, Person> sfPeople; //<SFID,Person>
+	private  boolean updateSF;
+	private Properties props; // names of fields for each SF org
+	private HashMap<String,String> deptIDs;
+	
+	public static final String SF_PEOPLE_SQL_BASE = 
+			  	"  select   \n " 
+			  + " 	-- Person  \n " 
+			  + " 	person.sfid as person_sfid,  \n " 
+			  + " 	person.<person_account_lookup_field__c> as person_account_lookup_field__c,  \n " 
+			  + " 	person.<person_kerb_id_field__c> as person_kerb_id_field__c ,  \n " 
+			  + " 	person.<person_first_name_field__c> as person_first_name_field__c,  \n " 
+			  + " 	person.<person_middle_name_field__c> as person_middle_name_field__c,  \n " 
+			  + " 	person.<person_last_name_field__c> as person_last_name_field__c,  \n " 
+			  + " 	person.<person_display_name_field__c> as person_display_name_field__c,  \n " 
+			  + " 	person.<person_email_field__c> as person_email_field__c,  \n " 
+			  + " 	person.<person_phone_number_field__c> as person_phone_number_field__c,  \n " 
+			  + " 	person.<person_website_field__c> as person_website_field__c,  \n " 
+			  + " 	person.<person_from_api_field__c> as person_from_api_field__c ,  \n " 
+			  + " 	person.<person_active_field__c> as person_active_field__c,  \n " 
+			  + " 	person.<person_active_date_field__c> as person_active_date_field__c ,  \n " 
+			  + " 	person.<person_inactive_date_field__c> as person_inactive_date_field__c ,  \n " 
+			  + " 	-- Affiliation  \n " 
+			  + " 	aff.sfid as aff_sfid,  \n " 
+			  + " 	aff.<affiliation_type_field__c> as affiliation_type_field__c,  \n " 
+			  + " 	aff.<affiliation_title_field__c> as affiliation_title_field__c,  \n " 
+			  + " 	aff.<affiliation_office_field__c> as affiliation_office_field__c,  \n " 
+			  + " 	aff.<affiliation_person_lookup_field__c> as affiliation_person_lookup_field__c,  \n " 
+			  + " 	aff.<affiliation_from_api_field__c> as affiliation_from_api_field__c,  \n " 
+			  + " 	aff.<affiliation_active_field__c> as affiliation_active_field__c,  \n " 
+			  + " 	aff.<affiliation_active_date_field__c> as affiliation_active_date_field__c,  \n " 
+			  + " 	aff.<affiliation_inactive_date_field__c> as affiliation_inactive_date_field__c,  \n " 
+			  + " 	-- DepartmentAffiliation  \n " 
+			  + " 	deptaff.sfid as deptaff_sfid,  \n " 
+			  + " 	deptaff.<deptaff_orgunit_id_field__c> as deptaff_orgunit_id_field__c,  \n " 
+			  + " 	deptaff.<deptaff_affiliation_lookup_field__c> as deptaff_affiliation_lookup_field__c,  \n " 
+			  + " 	deptaff.<deptaff_department_lookup_field__c> as deptaff_department_lookup_field__c,  \n " 
+			  + " 	deptaff.<deptaff_from_api_field__c> as deptaff_from_api_field__c,  \n " 
+			  + " 	deptaff.<deptaff_active_field__c> as deptaff_active_field__c,  \n " 
+			  + " 	deptaff.<deptaff_active_date_field__c> as deptaff_active_date_field__c,  \n " 
+			  + " 	deptaff.<deptaff_inactive_date_field__c> as deptaff_inactive_date_field__c  \n " 
+			  + " from     \n " 
+			  + " 	<schema_name__c>.<person_object_name__c> as person     \n " 
+			  + " left join      \n " 
+			  + " 	<schema_name__c>.<affiliation_object_name__c> as aff     \n " 
+			  + " 	on     \n " 
+			  + " 		aff.<affiliation_person_lookup_field__c> = person.sfid     \n " 
+			  + " 		and aff.<affiliation_active_field__c> = true	\n "
+			  + "		and aff.<affiliation_from_api_field__c> = true	\n "
+			  + " left join     \n " 
+			  + " 	<schema_name__c>.<deptaff_object_name__c> as deptaff     \n " 
+			  + " 	on     \n " 
+			  + " 		deptaff.<deptaff_affiliation_lookup_field__c> = aff.sfid  \n "
+			  + " 		and deptaff.<deptaff_active_field__c> = true	\n "
+			  + "		and deptaff.<deptaff_from_api_field__c> = true	\n "
+			  + "  where 	\n "
+			  + " 		person.<person_active_field__c> = true	\n "
+			  + "		and person.<person_from_api_field__c> = true	\n ";
+			  
+	String SF_PEOPLE_SQL;
+	
+	public static final String SF_DEACTIVEATE_PERSON_SQL_BASE = "update <schema_name__c>.<person_object_name__c> set <person_active_field__c> = false, <person_inactive_date_field__c> = current_date where sfid = ?";
+	String SF_DEACTIVEATE_PERSON_SQL;
+	PreparedStatement deactivatePersonPS;
+	
+	public static final String SF_DEACTIVEATE_AFF_SQL_BASE = "update <schema_name__c>.<affiliation_object_name__c> set <affiliation_active_field__c> = false, <affiliation_inactive_date_field__c> = current_date where sfid = ?";
+	String SF_DEACTIVEATE_AFF_SQL;
+	PreparedStatement deactivateAffPS;
+	
+	public static final String SF_DEACTIVEATE_DEPTAFF_SQL_BASE = "update <schema_name__c>.<deptaff_object_name__c> set <deptaff_active_field__c> = false, <deptaff_inactive_date_field__c> = current_date where sfid = ?";
+	String SF_DEACTIVEATE_DEPTAFF_SQL;
+	PreparedStatement deactivateDeptAffPS;
+	
+	public static final String SF_UPDATE_AFF_SQL_BASE = "update <schema_name__c>.<affiliation_object_name__c> set <affiliation_office_field__c> = ? where sfid = ?";
+	String SF_UPDATE_AFF_SQL;
+	PreparedStatement updateAffPS;
+	
+	public static final String SF_DEPT_LIST_SQL_BASE = "select <department_orgunitid_field__c> department_orgunitid_field__c, sfid from <schema_name__c>.<department_object_name__c>  where <department_from_api_field__c> = true and <department_active_field__c> = true;";
+	String SF_DEPT_LIST_SQL;
+	
+	public static final String SF_GET_AFFILIATION_SFID_SQL_BASE = "select sfid from <schema_name__c>.<affiliation_object_name__c> where id = ?";
+	String SF_GET_AFFILIATION_SFID_SQL;
+	PreparedStatement getAffsfidPS;
+	
+	public static final String SF_UPDATE_PERSON_SQL_BASE = 
+			  			" update <schema_name__c>.<person_object_name__c>  \n " 
+					  + " 	set  \n " 
+					  + " 	-- <person_account_lookup_field__c> = ?,  \n " 
+					  + " 	<person_first_name_field__c> = ?,  \n " 
+					  + " 	<person_middle_name_field__c> = ?,  \n " 
+					  + " 	<person_last_name_field__c> = ?,  \n " 
+					  + " 	<person_display_name_field__c> = ?,  \n " 
+					  + " 	<person_email_field__c> = ?,  \n " 
+					  + " 	<person_phone_number_field__c> = ?,  \n " 
+					  + " 	<person_website_field__c> = ?  \n " 
+					  + " where  \n " 
+					  + " 	sfid = ? \n ";
+	String SF_UPDATE_PERSON_SQL;
+	PreparedStatement updatePersonPS;
+	
+	public static final String SF_INSERT_AFFILIATION_BASE = 
+			  			" insert into <schema_name__c>.<affiliation_object_name__c>  \n " 
+					  + " 	(  \n " 
+					  + " 		<affiliation_active_date_field__c>,   \n " 
+					  + " 		<affiliation_active_field__c>,  \n " 
+					  + " 		affiliation_type__c,  \n " 
+					  + " 		<affiliation_person_lookup_field__c>,  \n " 
+					  + " 		<affiliation_from_api_field__c>,  \n " 
+					  + " 		<affiliation_office_field__c>,  \n " 
+					  + " 		<affiliation_title_field__c>  \n " 
+					  + " 	)  \n " 
+					  + " values  \n " 
+					  + " 	(  current_date, true , ?, ?, true, ?, ? ) \n " ;
+	String SF_INSERT_AFFILIATION;				 
+	PreparedStatement insertAffPS;
+	
+	public static final String SF_INSERT_DEPTAFF_SQL_BASE =
+						"  insert into <schema_name__c>.<deptaff_object_name__c>  \n " 
+					  + " 	(  \n " 
+					  + " 		<deptaff_active_date_field__c>,   \n " 
+					  + " 		<deptaff_active_field__c>,  \n " 
+					  + " 		<deptaff_from_api_field__c>,  \n " 
+					  + " 		<deptaff_affiliation_lookup_field__c>,  \n " 
+					  + " 		<deptaff_department_lookup_field__c>,  \n " 
+					  + " 		<deptaff_orgunit_id_field__c>  \n " 
+					  + " 	)  \n " 
+					  + " values  \n " 
+					  + " 	(  current_date, true, true, ?, ?, ?) \n " ;
+	String SF_INSERT_DEPTAFF_SQL;
+	PreparedStatement insertDeptAff;
+	
+	/*
+	 * 
+	 * QUERY after re-conflaburaterating it with dev1 sandbox
+  select   
+  	-- Person  
+  	person.sfid as person_sfid,  
+  	person.accountid as person_account_lookup_field__c,  
+  	person.kerberos_id__c as person_kerb_id_field__c ,  
+  	person.firstname as person_first_name_field__c,  
+  	person.middle_name__c as person_middle_name_field__c,  
+  	person.lastname as person_last_name_field__c,  
+  	person.email as person_email_field__c,  
+  	person.phone as person_phone_number_field__c,  
+  	person.website__c as person_website_field__c,  
+  	person.from_api__c as person_from_api_field__c ,  
+  	person.active__c as person_active_field__c,  
+  	person.active_date__c as person_active_date_field__c ,  
+  	person.inactive_date__c as person_inactive_date_field__c ,  
+  	-- Affiliation  
+  	aff.sfid as aff_sfid,  
+  	aff.affiliation_type__c as affiliation_type_field__c,  
+  	aff.office__c as affiliation_office_field__c,  
+  	aff.contact__c as affiliation_person_lookup_field__c,  
+  	aff.from_api__c as affiliation_from_api_field__c,  
+  	aff.active__c as affiliation_active_field__c,  
+  	aff.active_date__c as affiliation_active_date_field__c,  
+  	aff.inactive_date__c as affiliation_inactive_date_field__c,  
+  	-- DepartmentAffiliation  
+  	deptaff.sfid as deptaff_sfid,  
+  	deptaff.orgunitid__c as deptaff_orgunit_id_field__c,  
+  	deptaff.affiliation__c as deptaff_affiliation_lookup_field__c,  
+  	deptaff.department__c as deptaff_department_lookup_field__c,  
+  	deptaff.from_api__c as deptaff_from_api_field__c,  
+  	deptaff.active__c as deptaff_active_field__c,  
+  	deptaff.active_date__c as deptaff_active_date_field__c,  
+  	deptaff.inactive_date__c as deptaff_inactive_date_field__c  
+  from     
+  	sfdev1.contact as person     
+  left join      
+  	sfdev1.affiliation__c as aff     
+  	on     
+  		aff.contact__c = person.sfid     
+  left join     
+  	sfdev1.department_affiliation__c as deptaff     
+  	on     
+  		deptaff.affiliation__c = aff.sfid ; 
+ 
+
+	 * 
+	 */
+	
 	public static final String TEST_JSON_STRING;
 	
 	static{
@@ -56,21 +255,610 @@ public class Persons {
 				+ "  }";
 	}
 	
-	public static void main(String[] args) throws UnirestException{
-		Persons me = new Persons();
-		me.getPerson("elander");
-		me.getPerson("ctoews");
+	public static void main(String[] args) throws UnirestException, URISyntaxException, SQLException{
+		//Persons me = new Persons(null,new Properties());
+		//me.getAPIperson("elander");
+		//me.getAPIperson("ctoews");
+		System.out.print(getAPIperson("bogus").toString());
+		//JSONObject testJson = new JSONObject(TEST_JSON_STRING);
+		//Person testPerson = parsePersonJson(testJson); 
+		//System.out.print(testPerson.toString());
+	}
+	
+	//-------------  CONSTRUCTOR  ----------------------
+	public Persons(Connection conn,Properties props) throws SQLException{
+		this.conn=conn;
+		this.props = props;
+		SF_PEOPLE_SQL = replaceProps(SF_PEOPLE_SQL_BASE);
+		SF_DEACTIVEATE_PERSON_SQL = replaceProps(SF_DEACTIVEATE_PERSON_SQL_BASE);
+		SF_DEACTIVEATE_AFF_SQL = replaceProps(SF_DEACTIVEATE_AFF_SQL_BASE);
+		SF_DEACTIVEATE_DEPTAFF_SQL = replaceProps(SF_DEACTIVEATE_DEPTAFF_SQL_BASE);
+		SF_UPDATE_PERSON_SQL = replaceProps(SF_UPDATE_PERSON_SQL_BASE);
+		SF_UPDATE_AFF_SQL = replaceProps(SF_UPDATE_AFF_SQL_BASE);
+		SF_DEPT_LIST_SQL = replaceProps(SF_DEPT_LIST_SQL_BASE);
+		SF_INSERT_AFFILIATION = replaceProps(SF_INSERT_AFFILIATION_BASE);
+		SF_GET_AFFILIATION_SFID_SQL = replaceProps(SF_GET_AFFILIATION_SFID_SQL_BASE);
+		SF_INSERT_DEPTAFF_SQL = replaceProps(SF_INSERT_DEPTAFF_SQL_BASE);
 		
-		JSONObject testJson = new JSONObject(TEST_JSON_STRING);
-		Person testPerson = parsePersonJson(testJson);
-		System.out.print(testPerson.toString());
+		sfPeople = new HashMap<String, Person>();  //sfid,Person
+		deptIDs = new HashMap<String,String>();
+		
+		String updateSFtext = props.getProperty("update_salesforce__c");
+		updateSF = Main.readSFcheckbox(updateSFtext);
+		loadDeptIDs();
+		//System.out.println("\n" + SF_PEOPLE_SQL + "\n");
+	}//end of constructor
+	
+	public void loadDeptIDs() throws SQLException{
+		logger.debug("TASK=LOADING_DEPTS STATUS=STARTING");
+		PreparedStatement deptPS = conn.prepareStatement(SF_DEPT_LIST_SQL);
+		logger.debug("SF_DEPT_LIST_SQL=" + SF_DEPT_LIST_SQL);
+		ResultSet deptRS = deptPS.executeQuery();
+		while(deptRS.next()){
+			String orgunitID = deptRS.getString("department_orgunitid_field__c");
+			String sfid = deptRS.getString("sfid");
+			logger.trace("TASK=LOADING_DEPTS ORGUNITID=" + orgunitID + " SFID=" + sfid);
+			deptIDs.put(orgunitID, sfid);
+		}
+		deptRS.close();
+		deptPS.close();
+	}//end loadDeptIDs
+	
+	/**
+	 * Compares and updates Person, Affiliation, and Department-Affiliation object
+	 */
+	public void compareUpdatePersons(){
+		
+		try {
+			deactivatePersonPS = conn.prepareStatement(SF_DEACTIVEATE_PERSON_SQL);
+			deactivateAffPS = conn.prepareStatement(SF_DEACTIVEATE_AFF_SQL);
+			deactivateDeptAffPS = conn.prepareStatement(SF_DEACTIVEATE_DEPTAFF_SQL);
+			updatePersonPS = conn.prepareStatement(SF_UPDATE_PERSON_SQL);
+			insertAffPS = conn.prepareStatement(SF_INSERT_AFFILIATION, Statement.RETURN_GENERATED_KEYS);
+			getAffsfidPS = conn.prepareStatement(SF_GET_AFFILIATION_SFID_SQL);
+			insertDeptAff = conn.prepareStatement(SF_INSERT_DEPTAFF_SQL);
+			updateAffPS = conn.prepareStatement(SF_UPDATE_AFF_SQL);
+		} catch (SQLException e) {
+			logger.fatal(" TASK=CREATING_PREPARED_STATEMENTS STATUS=EXCEPTION" , e);
+			return;
+		}
+		
+		
+		//we are going to iterate SFpersons
+		Iterator<String> sfIT = sfPeople.keySet().iterator();
+		while(sfIT.hasNext()){
+			String sfid = sfIT.next();
+			Person sfPerson = sfPeople.get(sfid);
+			String kerbID = sfPerson.getKerbID();
+			Person apiPerson = getAPIperson(kerbID);
+			try{
+				//if apiPerson is null, this person isn't in the system, or he's Neo...
+				if(apiPerson == null){
+					
+					deactivatePerson(sfPerson);
+				}else if(sfPerson.personFieldsEqual(apiPerson)){
+					//all is well, smiles all around
+				}else{
+					//we have two persons matching kerbID, now we just need to update SF person fields
+					updatePerson(apiPerson,sfPerson.getSfID());
+				}//end of if/else for person
+			}catch(Exception ex){
+				//kicking and error for THIS person
+				logger.error(" TASK=COMPARING_PERSON STATUS=EXCEPTION KERBID="  + kerbID,ex);
+			}
+			
+			compareUpdateAffs(apiPerson.getAffs(),sfPerson.getAffs(),sfPerson.getSfID());
+			
+		}//end of while sfPeople has next
+		
+		
+		
+		
+		
+		
+		try {
+			deactivatePersonPS.close();
+			deactivateAffPS.close();
+			deactivateDeptAffPS.close();
+			updatePersonPS.close();
+			insertAffPS.close();
+			getAffsfidPS.close();
+			insertDeptAff.close();
+			updateAffPS.close();
+		} catch (SQLException e) {
+			logger.error(" TASK=CLOSING_PREPAREDSTATEMENTS STATUS=EXCEPTION", e);
+		}
+	}//end of compareUpdate
+	
+	/**
+	 * Compares and updates Affiliations, needs api,SF HashSets, also needs SFID of the person record (possibly a contact) for creating link to person
+	 * @param apiAffs Affiliations from API for this person
+	 * @param sfAffs Affiliations from Salesforce for this person
+	 * @param personSFID  Salesforce 18 character ID of the person object these affilaition are associated with
+	 */
+	private void compareUpdateAffs(HashSet<Affiliation> apiAffs,HashSet<Affiliation> sfAffs, String personSFID){
+//		HashSet<Affiliation> toUpdate = new HashSet<Affiliation>();
+//		HashSet<Affiliation> toAdd = new HashSet<Affiliation>();
+//		HashSet<Affiliation> toRemove = new HashSet<Affiliation>();
+		
+		//iterate API Affs
+		Iterator<Affiliation> aIT = apiAffs.iterator();
+		while(aIT.hasNext()){
+			Affiliation apiAff = aIT.next();
+			boolean match = false;
+			
+			//inner loop over SF Affs
+			Iterator<Affiliation> sfIT = sfAffs.iterator();
+			sfLoop:
+			while(sfIT.hasNext()){
+				Affiliation sfAff = sfIT.next();
+				logger.debug(" TASK=COMPARING_AFFS SFID=" + sfAff.getSfID());
+				if(sfAff.equalValues(apiAff)){
+					logger.debug(" TASK=COMPARING_AFFS SFID=" + sfAff.getSfID() + " STATUS=EQUAL_VALUES");
+					aIT.remove();
+					sfIT.remove();
+					match = true;
+					break sfLoop;
+				}else if(sfAff.almostEqualValues(apiAff)){
+					updateAffiliation(apiAff,sfAff.getSfID());
+					aIT.remove();
+					sfIT.remove();
+					match = true;
+					break sfLoop;
+				}//end of if/else for aff equality
+			}//end of inner Sf Aff iterator
+			
+			if(!match){
+				//we didn't find a match, let's add this to SF
+				logger.info(" TASK=COMPARING_AFFS PERSON_SFID=" + personSFID + " STATUS=NO_MATCH");
+				insertAffiliation(apiAff,personSFID);
+			}
+			
+		}//end of API Aff iterator
+		
+		//now we need to deactivate leftover sfAffs
+		Iterator<Affiliation> sfIT = sfAffs.iterator();
+		logger.debug(" TASK=REMOVING_OLD_AFFILIATIONS STATUS=STARTING");
+		while(sfIT.hasNext()){
+			Affiliation removeAff = sfIT.next();
+			logger.debug(" TASK=REMOVING_AFFILIATION SFID=" + removeAff.getSfID() );
+			deactivateAff(removeAff);
+		}
+		
+	}//end of compareUpdateAffs
+	
+	/**
+	 * Inserts Affiliation and deptaff hash inside aff
+	 * @param aff Affiliation needing to be inserted
+	 * @param personSFID 18 character ID of the person associated with Affiliation
+	 */
+	private void insertAffiliation(Affiliation aff, String personSFID){
+		try{
+			logger.debug(" TASK=INSERTING_AFFILIATION STATUS=STARTING");
+			insertAffPS.clearParameters();
+			int c=1;
+			insertAffPS.setString(c++, aff.getType());
+			insertAffPS.setString(c++, personSFID);
+			insertAffPS.setString(c++, aff.getOffice());
+			insertAffPS.setString(c++, aff.getTitle());
+			insertAffPS.executeUpdate();
+			
+			ResultSet keyRS = insertAffPS.getGeneratedKeys();
+			Integer rowid;
+			if(keyRS.next()){
+				rowid = keyRS.getInt("id");
+			}else{
+				logger.error("TASK=INSERTING_AFFILIATION STATUS=ERROR NOTE='didn't get row ID back when inserting'");
+				return;
+			}
+			
+			//we have to get the Affiliation SFID
+			//prep the statement
+			getAffsfidPS.clearParameters();
+			getAffsfidPS.setInt(1, rowid);
+			logger.trace(" TASK=LOOKING_FOR_AFF_SFID ROW_ID=" + rowid);
+			String affSFID = null;
+			searchForSfidLoop:
+			for(int i = 1;i < 8 ; i++){
+				ResultSet sfidRS = getAffsfidPS.executeQuery();
+				boolean foundID = false;
+				if(sfidRS.next()){
+					String idAttempt = sfidRS.getString("sfid");
+					if(!sfidRS.wasNull()){
+						foundID = true;
+						affSFID = idAttempt;
+						logger.trace(" TASK=LOOKING_FOR_AFF_SFID ROW_ID=" + rowid + " SFID=" + affSFID);
+					}
+				}
+				if(!foundID){
+					logger.debug("TASK=INSERTING_AFFILIATION STATUS=WAITING_ON_AFF_SFID ATTEMPT=" + i + " ROW_ID=" + rowid);
+					Thread.sleep((i * i) * 1000);//wait 1,4,9,16,25,36,49,64 seconds for a sfid to show up
+				}else{
+					//we have a value
+					break searchForSfidLoop;
+				}
+			}//end loop looking for sfid
+			
+			//did we get an SFID
+			if(affSFID == null){
+				logger.error("TASK=INSERTING_AFFILIATION STATUS=ERROR NOTE='didn't get a salesforce ID back from inserting Affiliation'");
+				return;
+			}
+			
+			//now we go through and insert DeptAffs
+			TreeMap<String, DeptAff> deptAffs = aff.getDeptAffs();
+			Iterator<String> daIT = deptAffs.keySet().iterator();
+			while(daIT.hasNext()){
+				String orgunitID = daIT.next();
+				DeptAff deptAff = deptAffs.get(orgunitID);
+				deptAff.setAffiliationSFID(affSFID);
+				//get dept sfid
+				String deptID = deptIDs.get(orgunitID);
+				deptAff.setDepartmentSFID(deptID);
+				if(deptID == null){
+					logger.error("TASK=INSERTING_AFFILIATION STATUS=NO_DEPT_FOUND ORDUNITID=" + orgunitID + " AFFILIATE_SFID=" + affSFID);
+				}else{
+					//insert deptaff
+					insertDeptAff(deptAff);
+				}
+			}
+			
+			
+			
+			
+		}catch(Exception ex){
+			logger.error(" TASK=INSERTING_AFFILIATION STATUS=EXCEPTION PERSON_SFID=" + personSFID,ex);
+		}
+	}//end of insertAffiliation
+	
+	/**
+	 * insert a deptAff into Salesforce
+	 * @param deptAff deptAff must have affiliationSFID and deptSFID populated, or 
+	 */
+	private void insertDeptAff(DeptAff deptAff){
+		try{
+			insertDeptAff.clearParameters();
+			int c=1;
+			insertDeptAff.setString(c++, deptAff.getAffiliationSFID());
+			insertDeptAff.setString(c++, deptAff.getDepartmentSFID());
+			insertDeptAff.setString(c++, deptAff.getOrgUnitID());
+			logger.debug(" TASK=INSERTING_DEPTAFF AFFILIATION_SFID=" + deptAff.getAffiliationSFID() + " DEPARTMENT_SFID=" + deptAff.getDepartmentSFID() + " ORGUNITID=" + deptAff.getOrgUnitID());
+			insertDeptAff.executeUpdate();
+		}catch(Exception ex){
+			logger.error(" TASK=INSERTING_DEPTAFF STATUS=EXCEPTION",ex);
+		}
 	}
 	
-	public Persons(){
-		myLog = "";
+	
+	/**
+	 * Updates Office field only for the Affiliation object
+	 * @param aff object holding data to update into SF, normally Affiliation from API
+	 * @param sfid Salesforce 18 character ID of object to update
+	 */
+	private void updateAffiliation(Affiliation aff, String sfid){
+		try{
+			logger.debug("TASK=UPDATING_AFFILIATION STATUS=STARTING SFID=" + sfid);
+			updateAffPS.clearParameters();
+			int c=1;
+			updateAffPS.setString(c++, aff.getOffice());
+			updateAffPS.setString(c++, sfid);
+			int numUpdated = updateAffPS.executeUpdate();
+			if(numUpdated == 1){
+				logger.info(" TASK=UPDATING_AFFILIATION STATUS=SUCCESS  SFID=" + sfid);
+			}else{
+				logger.error(" TASK=UPDATING_AFFILIATION STATUS=SUCCESS SFID=" + sfid + " NUMUPDATED=" + numUpdated);
+			}
+		}catch(Exception ex){
+			logger.error("TASK=UPDATING_AFFILIATION STATUS=EXCEPTION SFID=" + sfid,ex);
+		}
 	}
 	
-	public Person getPerson(String kerbID) {
+	
+	/**
+	 * @param person object holding data to update into SF, normally person from API
+	 * @param sfid Salesforce 18 character ID of object to update
+	 */
+	private void updatePerson(Person person, String sfid){
+		
+		try{
+			logger.debug(" TASK=UPDATE_PERSON STATUS=STARTING SFID=" + sfid + " KERBID=" + person.getKerbID());
+			updatePersonPS.clearParameters();
+			int c=1;
+			updatePersonPS.setString(c++, person.getFirstName());
+			updatePersonPS.setString(c++, person.getMiddleName());
+			updatePersonPS.setString(c++, person.getLastName());
+			updatePersonPS.setString(c++, person.getDisplayName());
+			updatePersonPS.setString(c++, person.getEmail());
+			updatePersonPS.setString(c++, person.getPhoneNumber());
+			updatePersonPS.setString(c++, person.getWebsite());
+			updatePersonPS.setString(c++, sfid);
+			int numUpdated = updatePersonPS.executeUpdate();
+			if(numUpdated == 1){
+				logger.info(" TASK=UPDATE_PERSON STATUS=SUCCESS KERBID=" + person.getKerbID() + " SFID=" + person.getSfID());
+			}else{
+				logger.error(" TASK=UPDATE_PERSON STATUS=SUCCESS KERBID=" + person.getKerbID() + " SFID=" + person.getSfID() + " NUMUPDATED=" + numUpdated);
+			}
+			
+			
+		}catch(SQLException ex){
+			logger.error(" TASK=UPDATING_PERSON STATUS=EXCEPTION SFID=" + sfid + " KERBID=" + person.getKerbID(),ex);
+		}
+	}//end of updatePerson
+	
+	/**
+	 * deactivates a person, sets active=false, inactive_date = current_date, deactivates associated affiliations
+	 * @param person person object, must contain SFID
+	 */
+	private void deactivatePerson(Person person) {
+		
+		try{
+			logger.debug(" TASK=DEACTIVATE_PERSON STATUS=STARTING KERBID=" + person.getKerbID() + " SFID=" + person.getSfID());
+			deactivatePersonPS.clearParameters();
+			deactivatePersonPS.setString(1, person.getSfID());
+			int numUpdated = deactivatePersonPS.executeUpdate();
+			if(numUpdated == 1){
+				logger.info(" TASK=DEACTIVATE_PERSON STATUS=SUCCESS KERBID=" + person.getKerbID() + " SFID=" + person.getSfID());
+			}else{
+				logger.error(" TASK=DEACTIVATE_PERSON STATUS=SUCCESS KERBID=" + person.getKerbID() + " SFID=" + person.getSfID() + " NUMUPDATED=" + numUpdated);
+			}
+		}catch(SQLException ex){
+			logger.error(" TASK=DEACTIVATE_PERSON STATUS=EXCEPTION KERBID=" + person.getKerbID() + " SFID=" + person.getSfID(),ex);
+		}
+		//now we deactivate each Affiliation
+		HashSet<Affiliation> affs = person.getAffs();
+		for(Affiliation aff:affs){
+			deactivateAff(aff);
+		}
+		
+	}//end of deactivatePerson
+	
+	/**
+	 * deactivates an Affiliation object in Salesforce, and all child department-affiliation objects 
+	 * @param aff Affiliation object, must contain SFID
+	 */
+	private void deactivateAff( Affiliation aff) {
+		try{
+			logger.debug(" TASK=DEACTIVATE_AFFILIATION STATUS=STARTING  SFID=" + aff.getSfID());
+			deactivateAffPS.clearParameters();
+			deactivateAffPS.setString(1, aff.getSfID());
+			int numUpdated = deactivateAffPS.executeUpdate();
+			if(numUpdated == 1){
+				logger.info(" TASK=DEACTIVATE_AFFILIATION STATUS=SUCCESS  SFID=" + aff.getSfID());
+			}else{
+				logger.error(" TASK=DEACTIVATE_AFFILIATION STATUS=SUCCESS  SFID=" + aff.getSfID() + " NUMUPDATED=" + numUpdated);
+			}
+		}catch(SQLException ex){
+			logger.error(" TASK=DEACTIVATE_AFFILIATION STATUS=EXCEPTION  SFID=" + aff.getSfID(),ex);
+		}
+		
+		TreeMap<String, DeptAff> deptAffs = aff.getDeptAffs();
+		for(String eachOrg:deptAffs.keySet()){
+			DeptAff deptAff = deptAffs.get(eachOrg);
+			deactivateDeptAff(deptAff);
+		}
+		
+	}//end of deactivateAff
+	
+	
+	private void deactivateDeptAff(DeptAff deptAff){
+		//deactivateDeptAffPS
+		try{
+			logger.debug(" TASK=DEACTIVATE_DEPTAFF STATUS=STARTING  SFID=" + deptAff.getSfID());
+			deactivateDeptAffPS.clearParameters();
+			deactivateDeptAffPS.setString(1, deptAff.getSfID());
+			int numUpdated = deactivateDeptAffPS.executeUpdate();
+			if(numUpdated == 1){
+				logger.info(" TASK=DEACTIVATE_DEPTAFF STATUS=SUCCESS  SFID=" + deptAff.getSfID());
+			}else{
+				logger.error(" TASK=DEACTIVATE_DEPTAFF STATUS=SUCCESS  SFID=" + deptAff.getSfID() + " NUMUPDATED=" + numUpdated);
+			}
+		}catch(SQLException ex){
+			logger.error(" TASK=DEACTIVATE_DEPTAFF STATUS=EXCEPTION  SFID=" + deptAff.getSfID(),ex);
+		}
+		
+	}//end of deactivateDeptAff
+	
+	public void deDupe(){
+		//TODO need to build something looking for duplicate Kerbids with active, and from_api
+	}
+	
+	
+	
+	
+	
+	public void loadSFpeople(){
+		logger.trace("TASK=LOAD_SF_PEOPLE STATUS=STARTING SF_PEOPLE_SQL="  + SF_PEOPLE_SQL );
+		 //logThis(" TASK=LOAD_SF_PEOPLE STATUS=STARTING");
+		 try{
+			 
+			 PreparedStatement sfPS = conn.prepareStatement(SF_PEOPLE_SQL);
+			 ResultSet sfRS = sfPS.executeQuery();
+			 String lastPersonID = "person_initializing";
+			 String lastAffID = "aff_initializing";
+			 String thisPersonID = "FOO";
+			 String thisAffID = "BAR";
+			 Person eachPerson = null;
+			 Affiliation eachAff = null;
+			 DeptAff eachDeptAff = null;
+			 while(sfRS.next()){
+				 lastAffID = thisAffID;
+				lastPersonID = thisPersonID;//reset which was the last one
+				thisPersonID = sfRS.getString("person_sfid");
+				thisAffID = sfRS.getString("aff_sfid");
+				if(thisAffID == null){
+					thisAffID = "null";
+				}
+				
+				//----------- take care of last row before loading new row -----------
+				//first we always add the deptaff into any existing aff
+				if(eachAff != null && eachDeptAff != null ){
+					//if there is an existing Affiliation (not first run through), and there is a deptaff (not always have a deptaff)
+					eachAff.addDept(eachDeptAff);
+				}
+				
+				//see if we need to rollup aff into person
+				if(eachPerson != null && eachAff != null  && !lastAffID.equals(thisAffID)){
+					//if there is a person, and an affiliation, and this new row will be a new affiliation
+					eachPerson.addAffiliation(eachAff);
+				}
+				
+				
+				if(eachPerson != null && !thisPersonID.equals(lastPersonID)){
+					//if we have a person (not first pass through loop), and this is a new row for a person
+					sfPeople.put(lastPersonID, eachPerson);
+				}
+				
+				
+				
+				// ------------------  now load current row  -----------------------
+				// == Person ==
+				if(!lastPersonID.equals(thisPersonID)){
+//					if(eachPerson != null){
+//						//if this is not the first run through, load the last person into hashmap
+//						//first put last affiliation onto person
+//						eachPerson.addAffiliation(eachAff);
+//						this.sfPeople.put(lastPersonID, eachPerson);
+//					}
+//					
+//					//now create new person
+					eachPerson = parseRSperson(sfRS);
+				}
+				
+				// == Affiliation ==
+				if(!lastAffID.equals(thisAffID)){
+//					if(eachAff != null){
+//						//if this is not the first run through, load last affiliation into the person
+//						eachPerson.addAffiliation(eachAff);//BAD CODE BAD CODE  this is putting last Affilition into this person
+//					}
+//					
+					//now create new Affiliation
+					eachAff = parseRSaff(sfRS);
+				}
+				
+				// == Dept/Aff ==
+				//doesn't always have a deptAff...
+				eachDeptAff = parseRSdeptAff(sfRS);
+				//if not null ,add the deptAff
+//				if(eachDeptAff != null){
+//					eachAff.addDept(eachDeptAff);
+//				}
+				
+				
+				
+			 }//end of while(sfRS.next
+			
+			 //clean up from last row
+			//first we always add the deptaff into any existing aff
+				if(eachAff != null && eachDeptAff != null ){
+					//if there is an existing Affiliation (not first run through), and there is a deptaff (not always have a deptaff)
+					eachAff.addDept(eachDeptAff);
+				}
+				
+				//see if we need to rollup aff into person
+				if(eachPerson != null && eachAff != null ){
+					//if there is a person, and an affiliation, and this new row will be a new affiliation
+					eachPerson.addAffiliation(eachAff);
+				}
+				
+				
+				if(eachPerson != null ){
+					//if we have a person (not first pass through loop), and this is a new row for a person
+					sfPeople.put(thisPersonID, eachPerson);
+				}
+				
+			 
+			 
+			 
+			 
+			 sfRS.close();
+			 sfPS.close();
+		 }catch(SQLException ex){
+			 ex.printStackTrace();
+		 }
+		
+		
+		 logger.info(" TASK=LOAD_SF_PEOPLE STATUS=FINISHED");
+		 logger.trace("----------------OUTPUT OF SFPEOPLE SIZE=" + sfPeople.size() + " ------------------");
+		 Iterator<String> pIT = sfPeople.keySet().iterator();
+		 while(pIT.hasNext()){
+			 String pID = pIT.next();
+			 Person thisPerson = sfPeople.get(pID);
+			 logger.trace(thisPerson.toString());
+		 }
+		 logger.trace("----------------END OF OUTPUT OF SFPEOPLE------------------");
+	}//end of loadSFpeople
+	
+	private DeptAff parseRSdeptAff(ResultSet rs){
+		
+		try {
+			String sfID = rs.getString("deptaff_sfid");
+			if(rs.wasNull()){
+				return null;
+			}
+			String orgunitID = rs.getString("deptaff_orgunit_id_field__c");
+			String deptSFID = rs.getString("deptaff_department_lookup_field__c");
+			String affiliationSFID = rs.getString("deptaff_department_lookup_field__c");
+			DeptAff deptAff = new DeptAff(orgunitID,sfID).withAffiliationSFID(affiliationSFID).withDepartmentSFID(deptSFID);
+			return deptAff;
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block:
+			e.printStackTrace();
+			return null;
+		}
+		
+		
+	}
+	
+	private Affiliation parseRSaff(ResultSet rs){
+		//Affiliation(String type, String title, String office, String sfID)
+		try {
+			String type = rs.getString("affiliation_type_field__c");
+			String title = rs.getString("affiliation_title_field__c");
+			String office = rs.getString("affiliation_office_field__c");
+			String sfID = rs.getString("aff_sfid");
+			if(rs.wasNull()){
+				//there is no SFID
+				return null;
+			}
+			Affiliation thisAff = new Affiliation(type,title,office,sfID);
+			return thisAff;
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		}
+		
+		
+	}//end of parseRSaff
+	
+	
+	private Person parseRSperson(ResultSet rs){
+		
+		try {
+			String kerbID = rs.getString("person_kerb_id_field__c");
+			String firstName = rs.getString("person_first_name_field__c");
+			String middleName = rs.getString("person_middle_name_field__c");
+			String lastName = rs.getString("person_last_name_field__c");
+			String displayName = rs.getString("person_middle_name_field__c");
+			String email = rs.getString("person_email_field__c");
+			String phoneNumber = rs.getString("person_phone_number_field__c");
+			String website = rs.getString("person_website_field__c");
+			String sfID = rs.getString("person_sfid");
+			Person thisPerson = new Person(kerbID,firstName,middleName,lastName,displayName,email,phoneNumber,website,sfID);
+			return thisPerson;
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		}
+		
+	
+	}//end of parseRSperson
+	
+	
+	
+	public static Person getAPIperson(String kerbID) {
+		Person person;
 		if(kerbID == null){
 			return null;
 		}
@@ -84,17 +872,22 @@ public class Persons {
 					  .header("cache-control", "no-cache")
 					  //.header("postman-token", "bbb7ce03-8aee-fef1-97c6-a137796366e4")
 					  .asString();
+			logger.trace(" TASK=RECEIVING_JSON KERBID=" + kerbID + " JSON=" + response.getBody());
 			JSONObject responeJson = new JSONObject(response.getBody());
 			JSONObject personJson = responeJson.getJSONObject("item");
-			Person person = parsePersonJson(personJson);
-			System.out.print(person.toString());
+			person = parsePersonJson(personJson);
+			//System.out.print(person.toString());
 			//System.out.println("\nRESPONSE FOR " + kerbID + "\n" + response.getBody());
 		}catch(UnirestException ex){
-			logThis(" TASK=READING_PEOPLE_API STATUS=EXCEPTION EXCEPTION_TYPE=UNIREST KERBID=" + kerbID);
+			logger.error(" TASK=READING_PEOPLE_API STATUS=EXCEPTION EXCEPTION_TYPE=UNIREST KERBID=" + kerbID,ex);
+			person = null;
+		}catch(JSONException ex){
+			logger.error(" TASK=READING_PEOPLE_API STATUS=EXCEPTION EXCEPTION_TYPE=JSONEXCEPTION KERBID=" + kerbID, ex); //(" TASK=READING_PEOPLE_API STATUS=EXCEPTION EXCEPTION_TYPE=JSONEXCEPTION KERBID=" + kerbID);
+			person = null;
 		}
 		
 
-		return null;
+		return person;
 	}//end of getPerson
 	
 	public static Person parsePersonJson(JSONObject personJson){
@@ -103,13 +896,13 @@ public class Persons {
 		}
 		
 		String kerbID      = personJson.getString("kerberosId");
-		String firstName   = personJson.optString("givenName"  , null);
-		String lastName    = personJson.optString("familyName" , null);
-		String middleName  = personJson.optString("middleName" , null);
-		String displayName = personJson.optString("displayName", null);
-		String email       = personJson.optString("email"      , null);
-		String phoneNumber = personJson.optString("phoneNumber", null);
-		String website     = personJson.optString("website"    , null);
+		String firstName   = personJson.optString("givenName"  , "");
+		String lastName    = personJson.optString("familyName" , "");
+		String middleName  = personJson.optString("middleName" , "");
+		String displayName = personJson.optString("displayName", "");
+		String email       = personJson.optString("email"      , "");
+		String phoneNumber = personJson.optString("phoneNumber", "");
+		String website     = personJson.optString("website"    , "");
 		
 		Person person = new Person(kerbID,firstName,middleName,lastName,displayName,email,phoneNumber,website);
 		
@@ -134,8 +927,8 @@ public class Persons {
 					try{
 						String orgUnitId = deptJson.getString("orgUnitId");
 						String name      = deptJson.optString("name", null);
-						Department dept  = new Department(orgUnitId,name);
-						aff.addDept(dept);
+						DeptAff deptAff  = new DeptAff(orgUnitId).withName(name);
+						aff.addDept(deptAff);
 					}catch(Exception ex){
 						//if orgUnitID didn't have a value, walk away
 					}
@@ -150,26 +943,36 @@ public class Persons {
 		
 	}//end of parsePersonJson
 	
-	public String getMyLog() {
-		return myLog;
-	}
-
-	public String getMyLog(int sizeLimit){
-		String result = myLog;
-		if(result.length() > Main.MAX_LOG_SIZE){
-			result = result.substring(0, sizeLimit);
+	private  String replaceProps(String input){
+		String output = input;
+		for(String eachProp:Main.PEOPLE_SYNC_PROPERTIES){
+			output = output.replace("<" + eachProp + ">", this.props.getProperty(eachProp));
 		}
-		return result;
-	}
-
-
-	private void logThis(String whatToWrite){
-		myLog += Main.writeLog(whatToWrite) + "\n";
+		return output;
+		
 	}
 	
-	private void logThis(Department dept,String whatToWrite){
-		myLog += Main.writeLog(dept, whatToWrite) + "\n";
-	}
+	
+//	public String getMyLog() {
+//		return myLog;
+//	}
+//
+//	public String getMyLog(int sizeLimit){
+//		String result = myLog;
+//		if(result.length() > Main.MAX_LOG_SIZE){
+//			result = result.substring(0, sizeLimit);
+//		}
+//		return result;
+//	}
+//
+//
+//	private void logThis(String whatToWrite){
+//		myLog += Main.writeLog(whatToWrite) + "\n";
+//	}
+//	
+//	private void logThis(Person person,String whatToWrite){
+//		myLog += Main.writeLog(person, whatToWrite) + "\n";
+//	}
 	
 	
 	

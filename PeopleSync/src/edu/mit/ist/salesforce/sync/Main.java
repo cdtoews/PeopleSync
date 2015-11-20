@@ -1,9 +1,12 @@
 package edu.mit.ist.salesforce.sync;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -11,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.TreeMap;
@@ -70,14 +74,16 @@ public class Main {
 		,"log_archive_days__c" //how long until the logs are deleted (-1 to never delete)
 		//------- Person -----------
 		,"person_object_name__c" //object name for person object
+		,"person_account_lookup_field__c" //lookup to account
 		,"person_kerb_id_field__c" 
 		,"person_first_name_field__c"
 		,"person_middle_name_field__c"
 		,"person_last_name_field__c"
+		,"person_display_name_field__c"
 		,"person_email_field__c"
 		,"person_phone_number_field__c"
 		,"person_website_field__c"
-		,"person_log_changes" //should the sync update field on person object of changes
+		,"person_log_changes__c" //should the sync update field on person object of changes
 		,"person_update_notes_field__c"//optional field for log of person changes
 		,"person_from_api_field__c" //checkbox used to designate if 'person' is from API
 		,"person_active_field__c" //checkbox marked false when person not active in API
@@ -87,6 +93,7 @@ public class Main {
 		,"affiliation_object_name__c"
 		,"affiliation_type_field__c"
 		,"affiliation_office_field__c"
+		,"affiliation_title_field__c"
 		,"affiliation_person_lookup_field__c"
 		,"affiliation_from_api_field__c"
 		,"affiliation_active_field__c"
@@ -95,16 +102,23 @@ public class Main {
 		//-------- Dept_Affiliation -----------
 		,"deptaff_object_name__c"
 		,"deptaff_orgunit_id_field__c"
-		,"deptaff_name_field__c"
 		,"deptaff_affiliation_lookup_field__c"
 		,"deptaff_department_lookup_field__c"
 		,"deptaff_from_api_field__c"
 		,"deptaff_active_field__c"
 		,"deptaff_active_date_field__c"
 		,"deptaff_inactive_date_field__c"
-			};
+		//--------- Department ---------
+		,"department_object_name__c"
+		,"department_from_api_field__c"
+		,"department_active_field__c"
+		,"department_orgunitid_field__c"	
+		};
 	
 	public static final String RECORD_LOG_SQL = "update <home_schema>.dept_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
+	
+	
+	
 	
 	public Main() throws URISyntaxException, SQLException{
 		conn = getConnection();
@@ -114,19 +128,19 @@ public class Main {
 	
 	
 	public static void main(String[] args) throws URISyntaxException, SQLException{
+		//TestThis.main(null);
+		//System.exit(0);
+		
 		Main me = new Main();
 		me.run();
 	}
 	
 	public  void run() throws URISyntaxException, SQLException{
 		//emailMe();
-		//Small change
-		//added in dummy1
+		//TODO clean out the trash, items inserted that have no SFID, otherwise, we could keep dumping garbage into heroku db when connect breaks
 		
-		
-		HashSet<Properties> propSet = new HashSet<Properties>();
-		
-		
+		//each sync instance is a different hashset of properties
+		HashSet<Properties> deptPropSet = new HashSet<Properties>();
 		
 		//first let's iterate over dept_sync__c table
 		PreparedStatement syncListPS = conn.prepareStatement("select * from " + home_schema + ".dept_sync__c where sync_active__c = true");
@@ -138,7 +152,7 @@ public class Main {
 				
 				thisProp.put(syncProp, syncListRS.getString(syncProp));
 			}
-			propSet.add(thisProp);
+			deptPropSet.add(thisProp);
 		}//end of while syncListRS.next
 		
 		syncListRS.close();
@@ -148,22 +162,63 @@ public class Main {
 		
 		
 		//-------------------------------------------
-		//------------ Main work loop ---------------
+		//---------- Main Dept work loop ------------
 		//-------------------------------------------
-		for(Properties eachProp:propSet){
+		for(Properties eachProp:deptPropSet){
 			//System.out.println("---------start properties---------------");
 			//for(String syncProp:SYNC_PROPERTIES){
 			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
 			//}
+			resetTempLog();
 			current_schema = eachProp.getProperty("name");
 			//writeLog(" STATUS=STARTING_SCHEMA");
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
-			recordLog(depts.getMyLog(MAX_LOG_SIZE),eachProp.getProperty("sfid"));
+			recordLog(readTempLog(),eachProp.getProperty("sfid"));
 			writeLog(" STATUS=FINISHED_SCHEMA");
 			
 		}//end of looping through properties (sync sets)
+		
+		
+		
+		//-------- People ------------
+		
+		
+		//each sync instance is a different hashset of properties
+		HashSet<Properties> peoplePropSet = new HashSet<Properties>();
+		
+		//first let's iterate over dept_sync__c table
+		PreparedStatement psyncListPS = conn.prepareStatement("select * from " + home_schema + ".people_sync__c where sync_active__c = true");
+		ResultSet psyncListRS = psyncListPS.executeQuery();
+		while(psyncListRS.next()){
+			//let's load up a properties object for each record
+			
+			Properties thisProp = new Properties();
+			for(String syncProp:PEOPLE_SYNC_PROPERTIES){
+				//System.out.println(syncProp);
+				thisProp.put(syncProp, psyncListRS.getString(syncProp));
+			}
+			peoplePropSet.add(thisProp);
+		}//end of while syncListRS.next
+		
+		psyncListRS.close();
+		psyncListPS.close();
+		
+		
+		//-------------------------------------------
+		//---------- Main People work loop ----------
+		//-------------------------------------------
+		for(Properties eachProp:peoplePropSet){
+			resetTempLog();
+			current_schema = eachProp.getProperty("schema_name__c");
+			Persons persons = new Persons(conn, eachProp);
+			persons.deDupe();
+			persons.loadSFpeople();
+			persons.compareUpdatePersons();
+			
+		}
+		
 		
 		
 		
@@ -279,6 +334,31 @@ public class Main {
 		}
 	}//end of main
 	
+	public static String readTempLog(){
+		//we are assuming log is /logs/temp.log
+		String result = "";
+		try{
+			byte[] encoded = Files.readAllBytes(Paths.get("logs/temp.log"));
+			  result = new String(encoded, "UTF-8");
+				if(result.length() > MAX_LOG_SIZE){
+					result = result.substring(0, MAX_LOG_SIZE);
+				}
+		}catch(Exception ex){
+			ex.printStackTrace();
+			result = "unable to read file";
+		}
+		return result;
+	}//end of 
+	
+	
+	public static void resetTempLog(){
+		try {
+			java.nio.file.Files.deleteIfExists(Paths.get("logs/temp.log"));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	
 	public static Connection getConnection() throws URISyntaxException, SQLException {
 	    URI dbUri = new URI(System.getenv("DATABASE_URL"));
@@ -293,6 +373,14 @@ public class Main {
 	
 	public static String writeLog(String whatToWrite){
 		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;
+		System.out.println(result);
+		return result;
+	}
+	
+	public static String writeLog(Person person, String whatToWrite){
+		String kerbID = person.getKerbID();
+		String sfID = person.getSfID();
+		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " KERBEROS_ID=" + kerbID + " SFID=" + sfID + " " + whatToWrite;
 		System.out.println(result);
 		return result;
 	}
@@ -318,6 +406,14 @@ public class Main {
 			result += " HOSTNAME=UNKNOWN ";
 		}
 		return result;
+	}
+	
+	public static boolean readSFcheckbox(String field){
+		if(field != null && field.toLowerCase().equals("t")){
+			return true;
+		}else{
+			return false;
+		}
 	}
 	
 }//end of class

@@ -9,12 +9,14 @@ import java.util.Iterator;
 import java.util.Properties;
 import java.util.TreeMap;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Departments {
 	
-	
+	static final Logger logger = LogManager.getLogger(Departments.class.getName());
 	
 	public static final String SF_ACCOUNTS_SQL_BASE = "select * from <name>.<object_name__c> where <from_api_field__c> = true and <active_field__c> = true and <orgunitid_field__c> is not null";
 	String SF_ACCOUNTS_SQL;
@@ -40,7 +42,7 @@ public class Departments {
 	
 	String schema;
 	Properties props;
-	String myLog;
+	
 	
 	TreeMap<String, Department> apiMap ;
 	TreeMap<String, Department> sfMap;
@@ -64,8 +66,8 @@ public class Departments {
 	
 	public Departments(Properties props, TreeMap<String, Department> apiMap, Connection conn) throws URISyntaxException, SQLException{
 		
-		myLog = "";
-		logThis( " STATUS=STARTING_SCHEMA " + Main.getEnvInfo() );
+		
+		logger.info( " STATUS=STARTING_SCHEMA " + Main.getEnvInfo() );
 		this.props = props;
 		this.schema = this.props.getProperty("name");
 		this.conn = conn;
@@ -73,11 +75,8 @@ public class Departments {
 		
 		//let's populate updateSF
 		String updateSFtext = props.getProperty("update_salesforce__c");
-		if(updateSFtext != null && updateSFtext.toLowerCase().equals("t")){
-			updateSF = true;
-		}else{
-			updateSF = false;
-		}
+		updateSF = Main.readSFcheckbox(updateSFtext);
+		
 		
 		this.apiMap  = apiMap;
 		sfMap   = new TreeMap<String, Department>();
@@ -116,7 +115,7 @@ public class Departments {
 			trimLogs();
 			writeLog();
 		}else{
-			logThis(" STATUS=NOT_UPDATING_SF");
+			logger.info(" STATUS=NOT_UPDATING_SF");
 		}
 		
 		
@@ -128,7 +127,7 @@ public class Departments {
 	
 	private  void loadSFdepts(){
 		try {
-			logThis(" TASK=LOAD_SF_DATA STATUS=STARTING");
+			logger.info(" TASK=LOAD_SF_DATA STATUS=STARTING");
 			String OrgIDField = props.getProperty("orgunitid_field__c");
 			String nameField = props.getProperty("name_field__c");
 			
@@ -150,12 +149,12 @@ public class Departments {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		logThis(" TASK=LOAD_SF_DATA STATUS=FINISHED COUNT=" + sfMap.size());
+		logger.info(" TASK=LOAD_SF_DATA STATUS=FINISHED COUNT=" + sfMap.size());
 	}
 	
 	
 	private void compareMaps(){
-		logThis(" TASK=COMPARE_DATA STATUS=STARTING");
+		logger.info(" TASK=COMPARE_DATA STATUS=STARTING");
 		Iterator<String> it = apiMap.keySet().iterator();
 		while(it.hasNext()){
 			String apiID = it.next();
@@ -170,23 +169,23 @@ public class Departments {
 					sfMap.remove(apiID);
 				}else{
 					//set sfID for the dept so we can use it to update later
-					logThis(sfDept, " STATUS=DIFFERENCE_FOUND API_NAME=\"" + apiDept.getName() + "\"");
+					logger.info( " STATUS=DIFFERENCE_FOUND API_NAME=\"" + apiDept.getName() + "\" SFID=" + sfDept.getSfID() );
 					apiDept.setSfID(sfMap.get(apiID).getSfID());
 					sfMap.remove(apiID);
 				}
 			}else{
 				//there is not an entry in SF, NEW ACCOUNT
-				logThis(apiDept, " STATUS=NEW_ITEM_FOUND");
+				logger.info( " STATUS=NEW_ITEM_FOUND  " + apiDept.quickinfo());
 				addMap.put(apiID, apiDept);
 				it.remove();
 			}
 			
 		}
-		logThis(" TASK=COMPARE_DATA STATUS=FINISHED ITEMS_TO_ADD=" + addMap.size() + " ITEMS_TO_DEACTIVATE=" + sfMap.size() + " ITEMS_TO_UPDATE=" + apiMap.size());
+		logger.info(" TASK=COMPARE_DATA STATUS=FINISHED ITEMS_TO_ADD=" + addMap.size() + " ITEMS_TO_DEACTIVATE=" + sfMap.size() + " ITEMS_TO_UPDATE=" + apiMap.size());
 	}//end of compareMaps
 	
 	private void deactivateDepts() {
-		logThis(" TASK=DEACTIVATING_ACCOUNTS STATUS=STARTING");
+		logger.info(" TASK=DEACTIVATING_ACCOUNTS STATUS=STARTING");
 		try {
 			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL);
 			Iterator<String> it = sfMap.keySet().iterator();
@@ -199,24 +198,24 @@ public class Departments {
 				removePS.setString(1, thisDept.getSfID());
 				int numUpdated = removePS.executeUpdate();
 				if(numUpdated == 1){
-					logThis(thisDept," TASK=DEACTIVATING_ACCOUNT STATUS=SUCCESS ");
+					logger.info(" TASK=DEACTIVATING_ACCOUNT STATUS=SUCCESS " + thisDept.quickinfo());
 				}else{
-					logThis(thisDept," TASK=DEACTIVATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
+					logger.error(" TASK=DEACTIVATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo());
 				}
 				
 			}
 			removePS.close();
-			logThis(" TASK=DEACTIVATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+			logger.info(" TASK=DEACTIVATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
-			logThis(" TASK=DEACTIVATING_ACCOUNTS STATUS=EXCEPTION");
-			e.printStackTrace();
+			logger.error(" TASK=DEACTIVATING_ACCOUNTS STATUS=EXCEPTION",e);
+			
 		}
 		
 	}//end of deactivateDepts
 	
 	private void insertDepts(){
-		logThis(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
+		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
 		int updatedCount = 0;
 		try{
 			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL);
@@ -232,23 +231,23 @@ public class Departments {
 				insertPS.setString(c++, thisID);
 				int numUpdated = insertPS.executeUpdate();
 				if(numUpdated == 1){
-					logThis(thisDept, " TASK=INSERTING_ACCOUNT STATUS=SUCCESS ");
+					logger.debug( " TASK=INSERTING_ACCOUNT STATUS=SUCCESS " + thisDept.quickinfo());
 				}else{
-					logThis(thisDept, " TASK=INSERTING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
+					logger.error( " TASK=INSERTING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo() );
 				}
 			}
 			insertPS.close();
 			
 		}catch(SQLException ex){
-			logThis(" TASK=INSERTING_ACCOUNTS STATUS=EXCEPTION");
-			ex.printStackTrace();
+			logger.error(" TASK=INSERTING_ACCOUNTS STATUS=EXCEPTION",ex);
+			
 		}
-		logThis(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 		
 	}
 	
 	private void updateDepts(){
-		logThis(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
+		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
 		int updatedCount = 0;
 		try{
 			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL);
@@ -266,17 +265,17 @@ public class Departments {
 				updatePS.setString(c++, thisSFid);
 				int numUpdated = updatePS.executeUpdate();
 				if(numUpdated == 1){
-					logThis(thisDept," TASK=UPDATING_ACCOUNT STATUS=SUCCESS " );
+					logger.info(" TASK=UPDATING_ACCOUNT STATUS=SUCCESS " + thisDept.quickinfo() );
 				}else{
-					logThis(thisDept," TASK=UPDATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated);
+					logger.error(" TASK=UPDATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo());
 				}
 			}
 			updatePS.close();
 		}catch(SQLException ex){
-			logThis(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION");
+			logger.error(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION",ex);
 			ex.printStackTrace();
 		}
-		logThis(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
 	}
 	
 	public static String listDepts(TreeMap<String, Department> thisMap){
@@ -299,21 +298,21 @@ public class Departments {
 	}
 	
 	private void trimLogs(){
-		logThis(" TASK=TRIMMING_LOGS STATUS=STARTING");
+		logger.info(" TASK=TRIMMING_LOGS STATUS=STARTING");
 		//first how many days are we going back
 		Integer daysBack = null;
 		try{
 			daysBack = Integer.parseInt((String) this.props.get("log_archive_days__c"));
 		}catch(Exception ex){
-			logThis(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING REASON=NO_VALID_VALUE");
+			logger.error(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING REASON=NO_VALID_VALUE", ex);
 			//didn't get a good number back, let's just go home now
 			return;
 		}
 		
 		if(daysBack == null || daysBack < 0){
-			logThis(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING");
+			logger.info(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING");
 			//negative number or null, no trimming
-			logThis(" TASK=TRIMMING_LOGS STATUS=COMPLETING REASON=NO_VALID_VALUE");
+			
 			return;
 		}
 		
@@ -321,23 +320,25 @@ public class Departments {
 			PreparedStatement trimPS = conn.prepareStatement(TRIM_LOGS_SQL);
 			int numTrimmed = trimPS.executeUpdate();
 			trimPS.close();
-			logThis(" TASK=TRIMMING_LOGS STATUS=COMPLETE UPDATED=" + numTrimmed);
+			logger.info(" TASK=TRIMMING_LOGS STATUS=COMPLETE UPDATED=" + numTrimmed);
 			
 		}catch(SQLException ex){
-			logThis(" TASK=TRIMMING_LOGS STATUS=ERROR");
-			ex.printStackTrace();
+			logger.error(" TASK=TRIMMING_LOGS STATUS=ERROR",ex);
+			
 		}
 		
 	}//end of trimLogs
 	
 	
 	private void writeLog(){
-		logThis(" TASK=WRITING_LOG STATUS=STARTING");
+		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
+		
 		//just in case we get a ginormous log
-		String toWrite = getMyLog(Main.MAX_LOG_SIZE);
+		
+		String toWrite = Main.readTempLog();
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
-			logThis(" TASK=WRITING_LOG STATUS=SKIPPING");
+			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
 			return;
 		}
 		
@@ -346,13 +347,13 @@ public class Departments {
 			writePS.setString(1, toWrite);
 			int numInserted = writePS.executeUpdate();
 			if(numInserted == 1){
-				logThis(" TASK=WRITING_LOG SUCCESS=TRUE");
+				logger.debug(" TASK=WRITING_LOG SUCCESS=TRUE");
 			}else{
-				logThis(" TASK=WRITING_LOG SUCCESS=FALSE");
+				logger.error(" TASK=WRITING_LOG SUCCESS=FALSE");
 			}
 			writePS.close();
 		}catch(SQLException ex){
-			logThis( " TASK=WRITING_LOG STATUS=EXCEPTION");
+			logger.error( " TASK=WRITING_LOG STATUS=EXCEPTION",ex);
 		}
 		
 	}//end of writeLog
@@ -433,25 +434,25 @@ public class Departments {
 	
 	
 	
-	public String getMyLog() {
-		return myLog;
-	}
+//	public String getMyLog() {
+//		return myLog;
+//	}
+//
+//	public String getMyLog(int sizeLimit){
+//		String result = myLog;
+//		if(result.length() > Main.MAX_LOG_SIZE){
+//			result = result.substring(0, sizeLimit);
+//		}
+//		return result;
+//	}
 
-	public String getMyLog(int sizeLimit){
-		String result = myLog;
-		if(result.length() > Main.MAX_LOG_SIZE){
-			result = result.substring(0, sizeLimit);
-		}
-		return result;
-	}
 
-
-	private void logThis(String whatToWrite){
-		myLog += Main.writeLog(whatToWrite) + "\n";
-	}
+	//private void logThis(String whatToWrite){
+	//	myLog += Main.writeLog(whatToWrite) + "\n";
+	//}
 	
-	private void logThis(Department dept,String whatToWrite){
-		myLog += Main.writeLog(dept, whatToWrite) + "\n";
-	}
+	//private void logThis(Department dept,String whatToWrite){
+	//	myLog += Main.writeLog(dept, whatToWrite) + "\n";
+	//}
 	
 }

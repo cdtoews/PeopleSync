@@ -1,20 +1,21 @@
 package edu.mit.ist.salesforce.sync;
 
+import java.sql.Connection;
 import java.util.HashSet;
 import java.util.Iterator;
 
 public class Person {
 
-	String kerbID;
-	String firstName;
-	String middleName;
-	String lastName;
-	String displayName;
-	String email;
-	String phoneNumber;
-	String website;
-	String sfID;
-	HashSet<Affiliation> affs;
+	private String kerbID;
+	private String firstName;
+	private String middleName;
+	private String lastName;
+	private String displayName;
+	private String email;
+	private String phoneNumber;
+	private String website;
+	private String sfID;
+	private HashSet<Affiliation> affs;
 	
 	
 	public Person(String kerbID, String firstName, String middleName,
@@ -46,6 +47,7 @@ public class Person {
 		this.email = email;
 		this.phoneNumber = phoneNumber;
 		this.website = website;
+		affs = new HashSet<Affiliation>();
 		this.sfID = sfID;
 	}
 
@@ -141,5 +143,46 @@ public class Person {
 		
 	}
 	
+	public boolean deactivateSFperson(Connection conn,String updateNote){
+		
+		
+		
+		return false;
+	}
+	
+	public Boolean personFieldsEqual(Person otherPerson){
+
+		//probably need to change this to output the difference to log
+		if(
+				//either one of the SFID's is null, meaning we are going to ignore it for this comparison, or they match
+				((this.sfID == null || otherPerson.getSfID() == null) || this.sfID.equals(otherPerson.getSfID()))
+				&& areStringsEqual(this.kerbID , otherPerson.getKerbID())
+				&& areStringsEqual(this.firstName,otherPerson.getFirstName())
+				&& areStringsEqual(this.middleName , otherPerson.getMiddleName())
+				&& areStringsEqual(this.lastName, otherPerson.getLastName())
+				&& areStringsEqual(this.displayName,otherPerson.getDisplayName())
+				&& areStringsEqual(this.email,otherPerson.getEmail())
+				&& areStringsEqual(this.phoneNumber,otherPerson.getPhoneNumber())
+				&& areStringsEqual(this.website,otherPerson.getWebsite())
+				
+				){
+			return true;
+		}else{
+			return false;
+		}
+			
+
+	}
+	
+	public static boolean areStringsEqual(String s1, String s2){
+		if(s1 == null && s2 == null){
+			return true;
+		}else if(s1 == null || s2 == null){
+			return false;
+		}else{
+			//if we are here, neither is null
+			return s1.equals(s2);
+		}
+	}
 	
 }
