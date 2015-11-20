@@ -175,14 +175,9 @@ public class Person {
 	}
 	
 	public static boolean areStringsEqual(String s1, String s2){
-		if(s1 == null && s2 == null){
-			return true;
-		}else if(s1 == null || s2 == null){
-			return false;
-		}else{
-			//if we are here, neither is null
-			return s1.equals(s2);
-		}
+		s1 = (s1 == null) ? "" : s1;
+		s2 = (s2 == null) ? "" : s2;
+		return s1.equals(s2);
 	}
 	
 }

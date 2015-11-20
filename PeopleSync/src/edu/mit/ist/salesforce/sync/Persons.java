@@ -412,6 +412,7 @@ public class Persons {
 				//we didn't find a match, let's add this to SF
 				logger.info(" TASK=COMPARING_AFFS PERSON_SFID=" + personSFID + " STATUS=NO_MATCH");
 				insertAffiliation(apiAff,personSFID);
+				
 			}
 			
 		}//end of API Aff iterator
@@ -423,6 +424,8 @@ public class Persons {
 			Affiliation removeAff = sfIT.next();
 			logger.debug(" TASK=REMOVING_AFFILIATION SFID=" + removeAff.getSfID() );
 			deactivateAff(removeAff);
+			
+			
 		}
 		
 	}//end of compareUpdateAffs
@@ -433,6 +436,10 @@ public class Persons {
 	 * @param personSFID 18 character ID of the person associated with Affiliation
 	 */
 	private void insertAffiliation(Affiliation aff, String personSFID){
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=INSERTING_AFFILIATION PERSON_SFID=" + personSFID);
+			return;
+		}
 		try{
 			logger.debug(" TASK=INSERTING_AFFILIATION STATUS=STARTING");
 			insertAffPS.clearParameters();
@@ -511,11 +518,17 @@ public class Persons {
 		}
 	}//end of insertAffiliation
 	
+	
+	
 	/**
 	 * insert a deptAff into Salesforce
 	 * @param deptAff deptAff must have affiliationSFID and deptSFID populated, or 
 	 */
 	private void insertDeptAff(DeptAff deptAff){
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=INSERTING_DEPTAFF DEPT_SFID=" + deptAff.getDepartmentSFID());
+			return;
+		}
 		try{
 			insertDeptAff.clearParameters();
 			int c=1;
@@ -536,6 +549,10 @@ public class Persons {
 	 * @param sfid Salesforce 18 character ID of object to update
 	 */
 	private void updateAffiliation(Affiliation aff, String sfid){
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=UPDATING_AFFILIATION AFFILIATION_SFID=" + sfid);
+			return;
+		}
 		try{
 			logger.debug("TASK=UPDATING_AFFILIATION STATUS=STARTING SFID=" + sfid);
 			updateAffPS.clearParameters();
@@ -559,7 +576,10 @@ public class Persons {
 	 * @param sfid Salesforce 18 character ID of object to update
 	 */
 	private void updatePerson(Person person, String sfid){
-		
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=UPDATE_PERSON PERSON_SFID=" + sfid);
+			return;
+		}
 		try{
 			logger.debug(" TASK=UPDATE_PERSON STATUS=STARTING SFID=" + sfid + " KERBID=" + person.getKerbID());
 			updatePersonPS.clearParameters();
@@ -590,7 +610,10 @@ public class Persons {
 	 * @param person person object, must contain SFID
 	 */
 	private void deactivatePerson(Person person) {
-		
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_PERSON PERSON_SFID=" + person.getSfID());
+			return;
+		}
 		try{
 			logger.debug(" TASK=DEACTIVATE_PERSON STATUS=STARTING KERBID=" + person.getKerbID() + " SFID=" + person.getSfID());
 			deactivatePersonPS.clearParameters();
@@ -617,6 +640,11 @@ public class Persons {
 	 * @param aff Affiliation object, must contain SFID
 	 */
 	private void deactivateAff( Affiliation aff) {
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_AFFILIATION AFFILIATION_SFID=" + aff.getSfID());
+			return;
+		}
+		
 		try{
 			logger.debug(" TASK=DEACTIVATE_AFFILIATION STATUS=STARTING  SFID=" + aff.getSfID());
 			deactivateAffPS.clearParameters();
@@ -641,6 +669,11 @@ public class Persons {
 	
 	
 	private void deactivateDeptAff(DeptAff deptAff){
+		if(!updateSF){
+			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_DEPTAFF DEPTAFF_SFID=" + deptAff.getSfID());
+			return;
+		}
+		
 		//deactivateDeptAffPS
 		try{
 			logger.debug(" TASK=DEACTIVATE_DEPTAFF STATUS=STARTING  SFID=" + deptAff.getSfID());
@@ -713,35 +746,19 @@ public class Persons {
 				// ------------------  now load current row  -----------------------
 				// == Person ==
 				if(!lastPersonID.equals(thisPersonID)){
-//					if(eachPerson != null){
-//						//if this is not the first run through, load the last person into hashmap
-//						//first put last affiliation onto person
-//						eachPerson.addAffiliation(eachAff);
-//						this.sfPeople.put(lastPersonID, eachPerson);
-//					}
-//					
-//					//now create new person
+				//now create new person
 					eachPerson = parseRSperson(sfRS);
 				}
 				
 				// == Affiliation ==
 				if(!lastAffID.equals(thisAffID)){
-//					if(eachAff != null){
-//						//if this is not the first run through, load last affiliation into the person
-//						eachPerson.addAffiliation(eachAff);//BAD CODE BAD CODE  this is putting last Affilition into this person
-//					}
-//					
-					//now create new Affiliation
+
 					eachAff = parseRSaff(sfRS);
 				}
 				
 				// == Dept/Aff ==
 				//doesn't always have a deptAff...
 				eachDeptAff = parseRSdeptAff(sfRS);
-				//if not null ,add the deptAff
-//				if(eachDeptAff != null){
-//					eachAff.addDept(eachDeptAff);
-//				}
 				
 				
 				
@@ -839,7 +856,7 @@ public class Persons {
 			String firstName = rs.getString("person_first_name_field__c");
 			String middleName = rs.getString("person_middle_name_field__c");
 			String lastName = rs.getString("person_last_name_field__c");
-			String displayName = rs.getString("person_middle_name_field__c");
+			String displayName = rs.getString("person_display_name_field__c");
 			String email = rs.getString("person_email_field__c");
 			String phoneNumber = rs.getString("person_phone_number_field__c");
 			String website = rs.getString("person_website_field__c");
