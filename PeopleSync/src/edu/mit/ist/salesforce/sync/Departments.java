@@ -43,6 +43,11 @@ public class Departments {
 	String schema;
 	Properties props;
 	
+	private int apiDeptCount = 0;
+	private int deptsCreated = 0;
+	private int deptsUpdated = 0;
+	private int deptsDeactivated = 0;
+	
 	
 	TreeMap<String, Department> apiMap ;
 	TreeMap<String, Department> sfMap;
@@ -79,6 +84,7 @@ public class Departments {
 		
 		
 		this.apiMap  = apiMap;
+		apiDeptCount = this.apiMap.size();
 		sfMap   = new TreeMap<String, Department>();
 		addMap  = new TreeMap<String, Department>();
 		//make my queries specific to this instance
@@ -189,9 +195,9 @@ public class Departments {
 		try {
 			PreparedStatement removePS = conn.prepareStatement(SF_DEACTIVEATE_ACCOUNT_SQL);
 			Iterator<String> it = sfMap.keySet().iterator();
-			int updatedCount = 0;
+			
 			while(it.hasNext()){
-				updatedCount++;
+				deptsUpdated++;
 				String thisID = it.next();
 				Department thisDept = sfMap.get(thisID);
 				removePS.clearParameters();
@@ -205,7 +211,8 @@ public class Departments {
 				
 			}
 			removePS.close();
-			logger.info(" TASK=DEACTIVATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+			
+			logger.info(" TASK=DEACTIVATING_ACCOUNTS STATUS=FINISHED COUNT=" + deptsUpdated);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			logger.error(" TASK=DEACTIVATING_ACCOUNTS STATUS=EXCEPTION",e);
@@ -216,12 +223,12 @@ public class Departments {
 	
 	private void insertDepts(){
 		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
-		int updatedCount = 0;
+		
 		try{
 			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL);
 			Iterator<String> it = addMap.keySet().iterator();
 			while(it.hasNext()){
-				updatedCount ++;
+				deptsCreated ++;
 				String thisID = it.next();
 				Department thisDept = addMap.get(thisID);
 				String thisName = thisDept.getName();
@@ -242,19 +249,19 @@ public class Departments {
 			logger.error(" TASK=INSERTING_ACCOUNTS STATUS=EXCEPTION",ex);
 			
 		}
-		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + deptsCreated);
 		
 	}
 	
 	private void updateDepts(){
 		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
-		int updatedCount = 0;
+		
 		try{
 			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL);
 			Iterator<String> it = apiMap.keySet().iterator();
 			
 			while(it.hasNext()){
-				updatedCount ++;
+				deptsUpdated ++;
 				String thisID = it.next();
 				Department thisDept = apiMap.get(thisID);
 				String thisSFid = thisDept.getSfID();
@@ -275,7 +282,7 @@ public class Departments {
 			logger.error(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION",ex);
 			ex.printStackTrace();
 		}
-		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + updatedCount);
+		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + deptsUpdated);
 	}
 	
 	public static String listDepts(TreeMap<String, Department> thisMap){
@@ -335,7 +342,7 @@ public class Departments {
 		
 		//just in case we get a ginormous log
 		
-		String toWrite = Main.readTempLog();
+		String toWrite = getRunInfo();
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
@@ -432,6 +439,20 @@ public class Departments {
 	        }
 	}
 	
+	
+	public String getRunInfo(){
+		String cr = "\n";
+		String result = "";
+		result += Main.getEnvInfo() + cr;
+		result += "Schema=" + Main.current_schema + cr;
+		result += "----Department Object=" + props.getProperty("object_name__c") + cr;
+		result += "Departments created=" + deptsCreated + cr;
+		result += "Departments Updated=" + deptsUpdated + cr;
+		result += "Departments Deactivated=" + deptsDeactivated + cr;
+		result += "API Dept Count=" + apiDeptCount + cr;
+		
+		return result;
+	}
 	
 	
 //	public String getMyLog() {

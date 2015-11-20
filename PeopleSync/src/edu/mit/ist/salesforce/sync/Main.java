@@ -66,6 +66,7 @@ public class Main {
 	
 	public static final String[] PEOPLE_SYNC_PROPERTIES = new String[]{
 		"schema_name__c" //name of schema in Heroku Connect
+		,"sfid" //SFID of the row holding this info, so we can update with log
 		,"sync_active__c" //is this item active,
 		,"update_salesforce__c" // should this item update salesforce
 		//------- Log -----------
@@ -116,7 +117,9 @@ public class Main {
 		,"department_orgunitid_field__c"	
 		};
 	
-	public static final String RECORD_LOG_SQL = "update <home_schema>.dept_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
+	public static final String RECORD_DEPT_LOG_SQL = "update <home_schema>.dept_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
+	public static final String RECORD_PEOPLE_LOG_SQL = "update <home_schema>.people_sync__c set last_sync_date__c = current_timestamp, last_sync_log__c = ? where sfid = ?";
+	
 	
 	
 	
@@ -177,7 +180,7 @@ public class Main {
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
-			recordLog(readTempLog(),eachProp.getProperty("sfid"));
+			recordDeptLog(depts.getRunInfo(),eachProp.getProperty("sfid"));
 			logger.info(" STATUS=FINISHED_SCHEMA");
 			
 		}//end of looping through properties (sync sets)
@@ -218,7 +221,7 @@ public class Main {
 			persons.deDupe();
 			persons.loadSFpeople();
 			persons.compareUpdatePersons();
-			
+			recordPeopleLog(persons.getRunInfo(),eachProp.getProperty("sfid"));
 		}
 		
 		
@@ -272,10 +275,31 @@ public class Main {
 		return apiMap;
 	}
 	
-	private void recordLog(String logText, String sfID){
+	private void recordDeptLog(String logText, String sfID){
 		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
 		try{
-			PreparedStatement recordPS = conn.prepareStatement(RECORD_LOG_SQL.replace("<home_schema>", home_schema));
+			PreparedStatement recordPS = conn.prepareStatement(RECORD_DEPT_LOG_SQL.replace("<home_schema>", home_schema));
+			int c=1;
+			recordPS.setString(c++, logText);
+			recordPS.setString(c++, sfID);
+			Integer numUpdated = recordPS.executeUpdate();
+			if(numUpdated != null && numUpdated == 1){
+				logger.info(" TASK=RECORDING_LOG STATUS=SUCCESS");
+			}else{
+				logger.info(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
+			}
+		}catch(SQLException ex){
+			logger.info(" TASK=RECORDING_LOG STATUS=EXCEPTION");
+		}
+		
+		logger.info(" TASK=RECORDING_LOG STATUS=FINISHED");
+		
+	}
+	
+	private void recordPeopleLog(String logText, String sfID){
+		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
+		try{
+			PreparedStatement recordPS = conn.prepareStatement(RECORD_PEOPLE_LOG_SQL.replace("<home_schema>", home_schema));
 			int c=1;
 			recordPS.setString(c++, logText);
 			recordPS.setString(c++, sfID);

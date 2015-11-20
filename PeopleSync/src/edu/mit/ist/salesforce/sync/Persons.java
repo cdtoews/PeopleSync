@@ -31,6 +31,19 @@ public class Persons {
 	private  boolean updateSF;
 	private Properties props; // names of fields for each SF org
 	private HashMap<String,String> deptIDs;
+	private int personsCreated = 0;
+	private int personsUpdated = 0;
+	private int personsDeactivated = 0;
+	private int affsCreated = 0;
+	private int affsUpdated = 0;
+	private int affsDeactivated = 0;
+	private int deptAffsCreated = 0;
+	private int deptAffsUpdated = 0;
+	private int deptAffsDeactivated = 0;
+	
+	
+	
+	
 	
 	public static final String SF_PEOPLE_SQL_BASE = 
 			  	"  select   \n " 
@@ -110,6 +123,12 @@ public class Persons {
 	public static final String SF_GET_AFFILIATION_SFID_SQL_BASE = "select sfid from <schema_name__c>.<affiliation_object_name__c> where id = ?";
 	String SF_GET_AFFILIATION_SFID_SQL;
 	PreparedStatement getAffsfidPS;
+	
+	public static final String INSERT_LOG_SQL_BASE = "insert into <schema_name__c>.<log_object_name__c> (  <log_datetime_field__c> , <log_text_field__c>) values (current_timestamp, ?)";
+	String INSERT_LOG_SQL;
+	
+	public static final String TRIM_LOGS_SQL_BASE = "delete from <schema_name__c>.<log_object_name__c> where <log_datetime_field__c> < current_date - <log_archive_days__c> ";
+	String TRIM_LOGS_SQL;
 	
 	public static final String SF_UPDATE_PERSON_SQL_BASE = 
 			  			" update <schema_name__c>.<person_object_name__c>  \n " 
@@ -279,6 +298,8 @@ public class Persons {
 		SF_INSERT_AFFILIATION = replaceProps(SF_INSERT_AFFILIATION_BASE);
 		SF_GET_AFFILIATION_SFID_SQL = replaceProps(SF_GET_AFFILIATION_SFID_SQL_BASE);
 		SF_INSERT_DEPTAFF_SQL = replaceProps(SF_INSERT_DEPTAFF_SQL_BASE);
+		INSERT_LOG_SQL = replaceProps(INSERT_LOG_SQL_BASE);
+		TRIM_LOGS_SQL = replaceProps(TRIM_LOGS_SQL_BASE);
 		
 		sfPeople = new HashMap<String, Person>();  //sfid,Person
 		deptIDs = new HashMap<String,String>();
@@ -368,6 +389,11 @@ public class Persons {
 		} catch (SQLException e) {
 			logger.error(" TASK=CLOSING_PREPAREDSTATEMENTS STATUS=EXCEPTION", e);
 		}
+		if(updateSF){
+			trimLogs();
+			writeLog();
+		}
+		
 	}//end of compareUpdate
 	
 	/**
@@ -440,6 +466,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=INSERTING_AFFILIATION PERSON_SFID=" + personSFID);
 			return;
 		}
+		affsCreated++;
 		try{
 			logger.debug(" TASK=INSERTING_AFFILIATION STATUS=STARTING");
 			insertAffPS.clearParameters();
@@ -529,6 +556,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=INSERTING_DEPTAFF DEPT_SFID=" + deptAff.getDepartmentSFID());
 			return;
 		}
+		deptAffsCreated++;
 		try{
 			insertDeptAff.clearParameters();
 			int c=1;
@@ -553,6 +581,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=UPDATING_AFFILIATION AFFILIATION_SFID=" + sfid);
 			return;
 		}
+		affsUpdated++;
 		try{
 			logger.debug("TASK=UPDATING_AFFILIATION STATUS=STARTING SFID=" + sfid);
 			updateAffPS.clearParameters();
@@ -580,6 +609,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=UPDATE_PERSON PERSON_SFID=" + sfid);
 			return;
 		}
+		personsUpdated++;
 		try{
 			logger.debug(" TASK=UPDATE_PERSON STATUS=STARTING SFID=" + sfid + " KERBID=" + person.getKerbID());
 			updatePersonPS.clearParameters();
@@ -614,6 +644,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_PERSON PERSON_SFID=" + person.getSfID());
 			return;
 		}
+		personsDeactivated++;
 		try{
 			logger.debug(" TASK=DEACTIVATE_PERSON STATUS=STARTING KERBID=" + person.getKerbID() + " SFID=" + person.getSfID());
 			deactivatePersonPS.clearParameters();
@@ -644,7 +675,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_AFFILIATION AFFILIATION_SFID=" + aff.getSfID());
 			return;
 		}
-		
+		affsDeactivated++;
 		try{
 			logger.debug(" TASK=DEACTIVATE_AFFILIATION STATUS=STARTING  SFID=" + aff.getSfID());
 			deactivateAffPS.clearParameters();
@@ -673,7 +704,7 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=DEACTIVATE_DEPTAFF DEPTAFF_SFID=" + deptAff.getSfID());
 			return;
 		}
-		
+		deptAffsDeactivated++;
 		//deactivateDeptAffPS
 		try{
 			logger.debug(" TASK=DEACTIVATE_DEPTAFF STATUS=STARTING  SFID=" + deptAff.getSfID());
@@ -969,6 +1000,86 @@ public class Persons {
 		
 	}
 	
+	private void trimLogs(){
+		logger.info(" TASK=TRIMMING_LOGS STATUS=STARTING");
+		//first how many days are we going back
+		Integer daysBack = null;
+		try{
+			daysBack = Integer.parseInt((String) this.props.get("log_archive_days__c"));
+		}catch(Exception ex){
+			logger.error(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING REASON=NO_VALID_VALUE", ex);
+			//didn't get a good number back, let's just go home now
+			return;
+		}
+		
+		if(daysBack == null || daysBack < 0){
+			logger.info(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING");
+			//negative number or null, no trimming
+			
+			return;
+		}
+		
+		try{
+			PreparedStatement trimPS = conn.prepareStatement(TRIM_LOGS_SQL);
+			int numTrimmed = trimPS.executeUpdate();
+			trimPS.close();
+			logger.info(" TASK=TRIMMING_LOGS STATUS=COMPLETE UPDATED=" + numTrimmed);
+			
+		}catch(SQLException ex){
+			logger.error(" TASK=TRIMMING_LOGS STATUS=ERROR",ex);
+			
+		}
+		
+	}//end of trimLogs
+	
+	private void writeLog(){
+		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
+		
+		//just in case we get a ginormous log
+		
+		String toWrite = getRunInfo();
+		String logObject = (String) props.get("log_object_name__c");
+		if (logObject == null || logObject.equals("") ){
+			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
+			return;
+		}
+		
+		try{
+			PreparedStatement writePS = conn.prepareStatement(INSERT_LOG_SQL);
+			writePS.setString(1, toWrite);
+			int numInserted = writePS.executeUpdate();
+			if(numInserted == 1){
+				logger.debug(" TASK=WRITING_LOG SUCCESS=TRUE");
+			}else{
+				logger.error(" TASK=WRITING_LOG SUCCESS=FALSE");
+			}
+			writePS.close();
+		}catch(SQLException ex){
+			logger.error( " TASK=WRITING_LOG STATUS=EXCEPTION",ex);
+		}
+		
+	}//end of writeLog
+	
+	public String getRunInfo(){
+		String cr = "\n";
+		String result = "";
+		result += Main.getEnvInfo() + cr;
+		result += "Schema=" + Main.current_schema + cr;
+		result += "----Person Object=" + props.getProperty("person_object_name__c") + cr;
+		result += "Persons created=" + personsCreated + cr;
+		result += "Persons Updated=" + personsUpdated + cr;
+		result += "Persons Deactivated=" + personsDeactivated + cr;
+		result += "----Affiliation Object=" + props.getProperty("affiliation_object_name__c") + cr;
+		result += "Affiliations created=" + affsCreated + cr;
+		result += "Affiliations Updated=" + affsUpdated + cr;
+		result += "Affiliations Deactivated=" + affsDeactivated + cr;
+		result += "----DepartmentAffiliation Object=" + props.getProperty("deptaff_object_name__c") + cr;
+		result += "Department-Affiliations created=" + deptAffsCreated + cr;
+		result += "Department-Affiliations Updated=" + deptAffsUpdated + cr;
+		result += "Department-Affiliations Deactivated=" + deptAffsDeactivated + cr;
+		
+		return result;
+	}
 	
 //	public String getMyLog() {
 //		return myLog;
