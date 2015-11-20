@@ -16,7 +16,7 @@ import org.json.JSONObject;
 
 public class Departments {
 	
-	static final Logger logger = LogManager.getLogger(Departments.class.getName());
+	static final Logger logger = LogManager.getLogger(Departments.class);
 	
 	public static final String SF_ACCOUNTS_SQL_BASE = "select * from <name>.<object_name__c> where <from_api_field__c> = true and <active_field__c> = true and <orgunitid_field__c> is not null";
 	String SF_ACCOUNTS_SQL;

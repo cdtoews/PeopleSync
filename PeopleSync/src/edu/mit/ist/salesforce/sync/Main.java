@@ -1,6 +1,5 @@
 package edu.mit.ist.salesforce.sync;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -13,8 +12,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.TreeMap;
@@ -27,6 +24,8 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -37,6 +36,8 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class Main {
 
+	static final Logger logger = LogManager.getLogger(Main.class);
+	
 	Connection conn;
 	public static String current_schema = "INITIALIZING";
 	public String home_schema = "INITIALIZING";
@@ -169,14 +170,15 @@ public class Main {
 			//for(String syncProp:SYNC_PROPERTIES){
 			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
 			//}
-			resetTempLog();
+			
 			current_schema = eachProp.getProperty("name");
+			logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
 			//writeLog(" STATUS=STARTING_SCHEMA");
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
 			recordLog(readTempLog(),eachProp.getProperty("sfid"));
-			writeLog(" STATUS=FINISHED_SCHEMA");
+			logger.info(" STATUS=FINISHED_SCHEMA");
 			
 		}//end of looping through properties (sync sets)
 		
@@ -210,7 +212,7 @@ public class Main {
 		//---------- Main People work loop ----------
 		//-------------------------------------------
 		for(Properties eachProp:peoplePropSet){
-			resetTempLog();
+			//resetTempLog();
 			current_schema = eachProp.getProperty("schema_name__c");
 			Persons persons = new Persons(conn, eachProp);
 			persons.deDupe();
@@ -230,7 +232,7 @@ public class Main {
 	
 	public static  TreeMap<String, Department> getAPIdepts(){
 		TreeMap<String, Department> apiMap = new TreeMap<String, Department>();
-		writeLog(" TASK=LOAD_API_DATA STATUS=STARTING");
+		logger.info(" TASK=LOAD_API_DATA STATUS=STARTING");
 		try {
 			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
 					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
@@ -256,9 +258,9 @@ public class Main {
             	//System.out.println("orgUnitId : "+jsonArray.getJSONObject(i).getString("orgUnitId"));
                 //System.out.println("name : "+jsonArray.getJSONObject(i).getString("name"));
             }
-            writeLog(" TASK=LOAD_API_DATA COUNT=" + listSize);
+            logger.info(" TASK=LOAD_API_DATA COUNT=" + listSize);
             if(apiMap.size() != listSize){
-            	writeLog(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
+            	logger.info(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
             	System.exit(1);
             }
 			
@@ -266,12 +268,12 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		writeLog(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
+		logger.info(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
 		return apiMap;
 	}
 	
 	private void recordLog(String logText, String sfID){
-		writeLog(" TASK=RECORDING_LOG STATUS=STARTING");
+		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
 		try{
 			PreparedStatement recordPS = conn.prepareStatement(RECORD_LOG_SQL.replace("<home_schema>", home_schema));
 			int c=1;
@@ -279,15 +281,15 @@ public class Main {
 			recordPS.setString(c++, sfID);
 			Integer numUpdated = recordPS.executeUpdate();
 			if(numUpdated != null && numUpdated == 1){
-				writeLog(" TASK=RECORDING_LOG STATUS=SUCCESS");
+				logger.info(" TASK=RECORDING_LOG STATUS=SUCCESS");
 			}else{
-				writeLog(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
+				logger.info(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
 			}
 		}catch(SQLException ex){
-			writeLog(" TASK=RECORDING_LOG STATUS=EXCEPTION");
+			logger.info(" TASK=RECORDING_LOG STATUS=EXCEPTION");
 		}
 		
-		writeLog(" TASK=RECORDING_LOG STATUS=FINISHED");
+		logger.info(" TASK=RECORDING_LOG STATUS=FINISHED");
 		
 	}
 	
@@ -336,6 +338,7 @@ public class Main {
 	
 	public static String readTempLog(){
 		//we are assuming log is /logs/temp.log
+		if(true) return "logs coming soon";
 		String result = "";
 		try{
 			byte[] encoded = Files.readAllBytes(Paths.get("logs/temp.log"));
@@ -351,14 +354,18 @@ public class Main {
 	}//end of 
 	
 	
-	public static void resetTempLog(){
-		try {
-			java.nio.file.Files.deleteIfExists(Paths.get("logs/temp.log"));
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
+//	public static void resetTempLog(){
+//		
+//		try {
+//			
+//			java.nio.file.Files.deleteIfExists(Paths.get("logs/temp.log"));
+//			java.nio.file.Files.createFile(Paths.get("logs/temp.log"));
+//		} catch (Exception e) {
+//			// TODO Auto-generated catch block
+//			logger.error("can't delete log file",e);
+//			
+//		}
+//	}
 	
 	public static Connection getConnection() throws URISyntaxException, SQLException {
 	    URI dbUri = new URI(System.getenv("DATABASE_URL"));
@@ -371,29 +378,29 @@ public class Main {
 	}
 	
 	
-	public static String writeLog(String whatToWrite){
-		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;
-		System.out.println(result);
-		return result;
-	}
-	
-	public static String writeLog(Person person, String whatToWrite){
-		String kerbID = person.getKerbID();
-		String sfID = person.getSfID();
-		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " KERBEROS_ID=" + kerbID + " SFID=" + sfID + " " + whatToWrite;
-		System.out.println(result);
-		return result;
-	}
-	
-	public static String writeLog(Department dept, String whatToWrite){
-		String orgUnitID = dept.getOrgUnitID();
-		String Name = dept.getName();
-		String sfID = dept.getSfID();
-		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite;
-		System.out.println(result);
-		return result;
-		
-	}
+//	public static String writeLog(String whatToWrite){
+//		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;
+//		System.out.println(result);
+//		return result;
+//	}
+//	
+//	public static String writeLog(Person person, String whatToWrite){
+//		String kerbID = person.getKerbID();
+//		String sfID = person.getSfID();
+//		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " KERBEROS_ID=" + kerbID + " SFID=" + sfID + " " + whatToWrite;
+//		System.out.println(result);
+//		return result;
+//	}
+//	
+//	public static String writeLog(Department dept, String whatToWrite){
+//		String orgUnitID = dept.getOrgUnitID();
+//		String Name = dept.getName();
+//		String sfID = dept.getSfID();
+//		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite;
+//		System.out.println(result);
+//		return result;
+//		
+//	}
 	
 	public static String getEnvInfo(){
 		String result = "";

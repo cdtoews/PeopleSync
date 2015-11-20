@@ -23,7 +23,7 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class Persons {
-	static final Logger logger = LogManager.getLogger(Persons.class.getName());
+	static final Logger logger = LogManager.getLogger(Persons.class);
 	
 	private Connection conn;
 
