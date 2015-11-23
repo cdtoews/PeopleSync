@@ -25,9 +25,13 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.ThreadContext;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -127,6 +131,32 @@ public class Main {
 	
 	
 	public Main() throws URISyntaxException, SQLException{
+		//try to get logging level
+		Level level;
+		String levelString = System.getenv("LOG_LEVEL");
+		if("TRACE".equalsIgnoreCase(levelString)){
+			level = Level.TRACE;
+		}else if("DEBUG".equalsIgnoreCase(levelString)){
+			level = Level.DEBUG;
+		}else if("WARN".equalsIgnoreCase(levelString)){
+			level = Level.WARN;
+		}else if("ERROR".equalsIgnoreCase(levelString)){
+			level = Level.ERROR;
+		}else if("FATAL".equalsIgnoreCase(levelString)){
+			level = Level.FATAL;
+		}else{
+			//default level
+			level = Level.INFO;
+		}
+		
+		LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+		Configuration config = ctx.getConfiguration();
+		LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME); 
+		loggerConfig.setLevel(level);
+		ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig
+		logger.fatal("LOG_LEVEL=" + level.name());
+		
+		
 		conn = getConnection();
 		//let's get our home schema
 		home_schema = System.getenv("HOME_SCHEMA");
