@@ -15,6 +15,7 @@ import java.text.SimpleDateFormat;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import javax.mail.Message;
 import javax.mail.MessagingException;
@@ -26,6 +27,7 @@ import javax.mail.internet.MimeMessage;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.ThreadContext;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -140,6 +142,8 @@ public class Main {
 	}
 	
 	public  void run() throws URISyntaxException, SQLException{
+		ThreadContext.put("id", UUID.randomUUID().toString()); // Add the fishtag;
+		ThreadContext.put("current_schema", current_schema); 
 		//emailMe();
 		//TODO clean out the trash, items inserted that have no SFID, otherwise, we could keep dumping garbage into heroku db when connect breaks
 		
@@ -163,7 +167,7 @@ public class Main {
 		syncListPS.close();
 		//load API data once
 		TreeMap<String, Department> apiMap = getAPIdepts();
-		
+		ThreadContext.put("comparing", "Departments"); 
 		
 		//-------------------------------------------
 		//---------- Main Dept work loop ------------
@@ -175,6 +179,8 @@ public class Main {
 			//}
 			
 			current_schema = eachProp.getProperty("name");
+			ThreadContext.put("current_schema", current_schema); 
+			
 			logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
 			//writeLog(" STATUS=STARTING_SCHEMA");
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
@@ -210,13 +216,14 @@ public class Main {
 		psyncListRS.close();
 		psyncListPS.close();
 		
-		
+		ThreadContext.put("comparing", "People"); 
 		//-------------------------------------------
 		//---------- Main People work loop ----------
 		//-------------------------------------------
 		for(Properties eachProp:peoplePropSet){
 			//resetTempLog();
 			current_schema = eachProp.getProperty("schema_name__c");
+			ThreadContext.put("current_schema", current_schema); 
 			Persons persons = new Persons(conn, eachProp);
 			persons.deDupe();
 			persons.loadSFpeople();
