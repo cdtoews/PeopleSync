@@ -97,7 +97,8 @@ public class Persons {
 			  + "		and deptaff.<deptaff_from_api_field__c> = true	\n "
 			  + "  where 	\n "
 			  + " 		person.<person_active_field__c> = true	\n "
-			  + "		and person.<person_from_api_field__c> = true	\n ";
+			  + "		and person.<person_from_api_field__c> = true	\n "
+			  + " order by person.createddate asc	\n ";
 			  
 	String SF_PEOPLE_SQL;
 	
@@ -176,6 +177,41 @@ public class Persons {
 					  + " 	(  current_date, true, true, ?, ?, ?) \n " ;
 	String SF_INSERT_DEPTAFF_SQL;
 	PreparedStatement insertDeptAff;
+	
+	public static final String ORPHANED_AFF_SQL_BASE = 
+			  			" select   \n " 
+					  + " 	aff.sfid  \n " 
+					  + " from   \n " 
+					  + " 	<schema_name__c>.<affiliation_object_name__c> aff   \n " 
+					  + " left join   \n " 
+					  + " 	<schema_name__c>.<person_object_name__c> person   \n " 
+					  + " on   \n " 
+					  + " 	aff.<affiliation_person_lookup_field__c> = person.sfid   \n " 
+					  + " 	and person.<person_active_field__c> = true  \n " 
+					  + " 	and person.<person_from_api_field__c> = true  \n " 
+					  + " where   \n " 
+					  + " 	person.sfid is null  \n " 
+					  + " 	and aff.<affiliation_active_field__c> = true  \n " 
+					  + " 	and aff.<affiliation_from_api_field__c> = true \n ";
+	String ORPHANED_AFF_SQL;
+	
+	public static final String ORPHANED_DEPTAFF_SQL_BASE =
+			  			" select   \n " 
+					  + " 	deptaff.sfid  \n " 
+					  + " from   \n " 
+					  + " 	<schema_name__c>.<deptaff_object_name__c> deptaff   \n " 
+					  + " left join   \n " 
+					  + " 	<schema_name__c>.<affiliation_object_name__c> aff   \n " 
+					  + " on   \n " 
+					  + " 	deptaff.<deptaff_affiliation_lookup_field__c> = aff.sfid   \n " 
+					  + " 	and aff.<affiliation_active_field__c> = true  \n " 
+					  + " 	and aff.<affiliation_from_api_field__c> = true  \n " 
+					  + " where   \n " 
+					  + " 	aff.sfid is null  \n " 
+					  + " 	and deptaff.<deptaff_active_field__c> = true  \n " 
+					  + " 	and deptaff.<deptaff_from_api_field__c> = true; \n ";
+	String ORPHANED_DEPTAFF_SQL;
+	
 	
 	/*
 	 * 
@@ -300,6 +336,8 @@ public class Persons {
 		SF_INSERT_DEPTAFF_SQL = replaceProps(SF_INSERT_DEPTAFF_SQL_BASE);
 		INSERT_LOG_SQL = replaceProps(INSERT_LOG_SQL_BASE);
 		TRIM_LOGS_SQL = replaceProps(TRIM_LOGS_SQL_BASE);
+		ORPHANED_AFF_SQL = replaceProps(ORPHANED_AFF_SQL_BASE);
+		ORPHANED_DEPTAFF_SQL = replaceProps(ORPHANED_DEPTAFF_SQL_BASE);
 		
 		sfPeople = new HashMap<String, Person>();  //sfid,Person
 		deptIDs = new HashMap<String,String>();
@@ -326,6 +364,47 @@ public class Persons {
 	}//end loadDeptIDs
 	
 	/**
+	 * deactivates orphaned affiliations, and department-affiliations
+	 */
+	public void clearOrphans(){
+		
+		try {
+			PreparedStatement oaffPS = conn.prepareStatement(ORPHANED_AFF_SQL);
+			ResultSet oaffRS = oaffPS.executeQuery();
+			while(oaffRS.next()){
+				String oSFID = oaffRS.getString("sfid");
+				Affiliation thisAff = new Affiliation(null,null,null,oSFID);
+				logger.warn(" TASK=ORPHAN_AFFILIATE_SEARCH STATUS=FOUND_ORPHAN SFID=" + oSFID);
+				deactivateAff(thisAff);
+			}
+			oaffRS.close();
+			oaffPS.close();
+		} catch (SQLException ex) {
+			logger.error("TASK=ORPHAN_AFFILIATION_CLEANUP STATUS=EXCEPTION",ex);
+		}
+		
+		//ORPHANED_DEPTAFF_SQL
+		try {
+			PreparedStatement odaffPS = conn.prepareStatement(ORPHANED_DEPTAFF_SQL);
+			ResultSet odaffRS = odaffPS.executeQuery();
+			while(odaffRS.next()){
+				String oSFID = odaffRS.getString("sfid");
+				DeptAff thisDeptAff = new DeptAff(null,oSFID);
+				logger.warn(" TASK=ORPHAN_DEPTAFF_SEARCH STATUS=FOUND_ORPHAN SFID=" + oSFID);
+				this.deactivateDeptAff(thisDeptAff);
+			}
+			odaffRS.close();
+			odaffPS.close();
+		} catch (SQLException ex) {
+			logger.error("TASK=ORPHAN_DEPTAFF_CLEANUP STATUS=EXCEPTION",ex);
+		}
+		
+		
+		
+	}
+	
+	
+	/**
 	 * Compares and updates Person, Affiliation, and Department-Affiliation object
 	 */
 	public void compareUpdatePersons(){
@@ -344,6 +423,8 @@ public class Persons {
 			return;
 		}
 		
+		//first remove orphans
+		clearOrphans();
 		
 		//we are going to iterate SFpersons
 		Iterator<String> sfIT = sfPeople.keySet().iterator();
@@ -356,6 +437,9 @@ public class Persons {
 				//if apiPerson is null, this person isn't in the system, or he's Neo...
 				if(apiPerson == null){
 					
+					deactivatePerson(sfPerson);
+				}else if(sfPerson.isDuplicate()){
+					logger.warn(" TASK=COMPARING_PERSON STATUS=FOUND_DUPLICATE_KERBID KERBID=" + sfPerson.getKerbID() + " SFID=" + sfPerson.getSfID());
 					deactivatePerson(sfPerson);
 				}else if(sfPerson.personFieldsEqual(apiPerson)){
 					//all is well, smiles all around
@@ -722,16 +806,12 @@ public class Persons {
 		
 	}//end of deactivateDeptAff
 	
-	public void deDupe(){
-		//TODO need to build something looking for duplicate Kerbids with active, and from_api
-	}
-	
-	
-	
 	
 	
 	public void loadSFpeople(){
 		logger.trace("TASK=LOAD_SF_PEOPLE STATUS=STARTING SF_PEOPLE_SQL="  + SF_PEOPLE_SQL );
+		HashSet<String> kerbIDs = new HashSet<String>();
+		
 		 //logThis(" TASK=LOAD_SF_PEOPLE STATUS=STARTING");
 		 try{
 			 
@@ -769,7 +849,16 @@ public class Persons {
 				
 				if(eachPerson != null && !thisPersonID.equals(lastPersonID)){
 					//if we have a person (not first pass through loop), and this is a new row for a person
+					if(kerbIDs.contains(eachPerson.getKerbID()) ){
+						//this is a duplicate
+						eachPerson.setDuplicate(true);
+					}else{
+						//not a duplicate, add kerb id
+						kerbIDs.add(eachPerson.getKerbID());
+					}
 					sfPeople.put(lastPersonID, eachPerson);
+					
+					
 				}
 				
 				
@@ -810,6 +899,13 @@ public class Persons {
 				
 				
 				if(eachPerson != null ){
+					if(kerbIDs.contains(eachPerson.getKerbID()) ){
+						//this is a duplicate
+						eachPerson.setDuplicate(true);
+					}else{
+						//not a duplicate, add kerb id
+						kerbIDs.add(eachPerson.getKerbID());
+					}
 					//if we have a person (not first pass through loop), and this is a new row for a person
 					sfPeople.put(thisPersonID, eachPerson);
 				}

@@ -16,7 +16,7 @@ public class Person {
 	private String website;
 	private String sfID;
 	private HashSet<Affiliation> affs;
-	
+	private boolean duplicate;
 	
 	public Person(String kerbID, String firstName, String middleName,
 			String lastName, String displayName, String email,
@@ -31,6 +31,7 @@ public class Person {
 		this.website = website;
 		affs = new HashSet<Affiliation>();
 		sfID = null;
+		duplicate = false;
 	}
 
 	
@@ -49,6 +50,7 @@ public class Person {
 		this.website = website;
 		affs = new HashSet<Affiliation>();
 		this.sfID = sfID;
+		duplicate = false;
 	}
 
 
@@ -116,6 +118,21 @@ public class Person {
 		return affs;
 	}
 	
+	
+
+	public boolean isDuplicate() {
+		return duplicate;
+	}
+
+
+
+
+	public void setDuplicate(boolean duplicate) {
+		this.duplicate = duplicate;
+	}
+
+
+
 
 	@Override
 	public String toString(){

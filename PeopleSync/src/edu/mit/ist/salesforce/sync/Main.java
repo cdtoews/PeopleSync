@@ -187,8 +187,9 @@ public class Main {
 			//let's load up a properties object for each record
 			Properties thisProp = new Properties();
 			for(String syncProp:DEPT_SYNC_PROPERTIES){
-				
-				thisProp.put(syncProp, syncListRS.getString(syncProp));
+				String thisValue = syncListRS.getString(syncProp);
+				logger.trace("TASK=LOADING_DEPT_VALUES " + syncProp + "=" + thisValue );
+				thisProp.put(syncProp, thisValue);
 			}
 			deptPropSet.add(thisProp);
 		}//end of while syncListRS.next
@@ -237,8 +238,9 @@ public class Main {
 			
 			Properties thisProp = new Properties();
 			for(String syncProp:PEOPLE_SYNC_PROPERTIES){
-				//System.out.println(syncProp);
-				thisProp.put(syncProp, psyncListRS.getString(syncProp));
+				String thisValue = psyncListRS.getString(syncProp);
+				logger.trace("TASK=LOADING_DEPT_VALUES " + syncProp + "=" + thisValue );
+				thisProp.put(syncProp, thisValue);
 			}
 			peoplePropSet.add(thisProp);
 		}//end of while syncListRS.next
@@ -255,7 +257,7 @@ public class Main {
 			current_schema = eachProp.getProperty("schema_name__c");
 			ThreadContext.put("current_schema", current_schema); 
 			Persons persons = new Persons(conn, eachProp);
-			persons.deDupe();
+			//persons.clearOrphans();
 			persons.loadSFpeople();
 			persons.compareUpdatePersons();
 			recordPeopleLog(persons.getRunInfo(),eachProp.getProperty("sfid"));
