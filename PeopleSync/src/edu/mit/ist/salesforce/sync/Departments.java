@@ -106,19 +106,25 @@ public class Departments {
 		
 	}
 	
-	
+	/**
+	 * Loads the Salesforce data into the departments object
+	 */
 	public void loadData(){
 		
 		loadSFdepts();
 	}
 	
+	/**
+	 * Compares SF depts to API depts, and if updateSF=true, then deactivates/inserts/updates
+	 */
 	public void CompareUpdate(){
 		compareMaps();
+		trimLogs();
 		if(updateSF){
 			deactivateDepts();
 			insertDepts();
 			updateDepts();
-			trimLogs();
+			
 			
 		}else{
 			logger.info(" STATUS=NOT_UPDATING_SF");
@@ -336,13 +342,16 @@ public class Departments {
 		
 	}//end of trimLogs
 	
-	
+	/**
+	 * Writes to the Department Log object for each schema. it puts some general info, then inlcudes logText
+	 * @param logText is the text to put along with some general information
+	 */
 	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
 		//just in case we get a ginormous log
 		
-		String toWrite = getRunInfo() + logText;
+		String toWrite = getRunInfo() + "-----FULL LOG-----\n"  + logText;
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");

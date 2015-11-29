@@ -234,7 +234,7 @@ public class Main {
 			depts.writeLog(getLog());
 			recordDeptLog( depts.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
 			logger.info(" STATUS=FINISHED_SCHEMA");
-			System.out.println("string appender output:");
+			
 		}//end of looping through properties (sync sets)
 		
 		
@@ -270,6 +270,7 @@ public class Main {
 		for(Properties eachProp:peoplePropSet){
 			resetLog();
 			current_schema = eachProp.getProperty("schema_name__c");
+			//put the current schema where the logger can get it
 			ThreadContext.put("current_schema", current_schema); 
 			Persons persons = new Persons(conn, eachProp);
 			//persons.clearOrphans();
@@ -330,6 +331,11 @@ public class Main {
 		return apiMap;
 	}
 	
+	/**
+	 * records the log to the DEPT_SYNC object in the home schema
+	 * @param logText is the text to put in the log
+	 * @param sfID is the SFID of the dept_sync object to update
+	 */
 	private void recordDeptLog(String logText, String sfID){
 		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
 		try{
@@ -351,6 +357,11 @@ public class Main {
 		
 	}
 	
+	/**
+	 * records log info to the home schema people_sync object
+	 * @param logText  log to update the object with
+	 * @param sfID is the salesforce ID of the object on the home schema
+	 */
 	private void recordPeopleLog(String logText, String sfID){
 		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
 		try{

@@ -349,7 +349,7 @@ public class Persons {
 	}//end of constructor
 	
 	public void loadDeptIDs() throws SQLException{
-		logger.debug("TASK=LOADING_DEPTS STATUS=STARTING");
+		logger.info("TASK=LOADING_DEPTS STATUS=STARTING");
 		PreparedStatement deptPS = conn.prepareStatement(SF_DEPT_LIST_SQL);
 		logger.debug("SF_DEPT_LIST_SQL=" + SF_DEPT_LIST_SQL);
 		ResultSet deptRS = deptPS.executeQuery();
@@ -361,44 +361,50 @@ public class Persons {
 		}
 		deptRS.close();
 		deptPS.close();
+		logger.info("TASK=LOADING_DEPTS STATUS=FINISHED");
 	}//end loadDeptIDs
 	
 	/**
 	 * deactivates orphaned affiliations, and department-affiliations
 	 */
 	public void clearOrphans(){
-		
+		logger.info("TASK=CLEARING_ORPHAN_AFFILIATES STATUS=STARTING");
 		try {
+			logger.trace("TASK=CLEARING_ORPHAN_AFFILIATES SQL=" + ORPHANED_AFF_SQL);
 			PreparedStatement oaffPS = conn.prepareStatement(ORPHANED_AFF_SQL);
 			ResultSet oaffRS = oaffPS.executeQuery();
 			while(oaffRS.next()){
 				String oSFID = oaffRS.getString("sfid");
 				Affiliation thisAff = new Affiliation(null,null,null,oSFID);
-				logger.warn(" TASK=ORPHAN_AFFILIATE_SEARCH STATUS=FOUND_ORPHAN SFID=" + oSFID);
+				logger.warn(" TASK=CLEARING_ORPHAN_AFFILIATES STATUS=FOUND_ORPHAN SFID=" + oSFID);
 				deactivateAff(thisAff);
 			}
 			oaffRS.close();
 			oaffPS.close();
 		} catch (SQLException ex) {
-			logger.error("TASK=ORPHAN_AFFILIATION_CLEANUP STATUS=EXCEPTION",ex);
+			logger.error("TASK=CLEARING_ORPHAN_AFFILIATES STATUS=EXCEPTION",ex);
 		}
+		logger.info("TASK=CLEARING_ORPHAN_AFFILIATES STATUS=FINISHED");
 		
+		
+		logger.info("TASK=CLEARING_ORPHAN_DEPTAFFS STATUS=STARTED");
 		//ORPHANED_DEPTAFF_SQL
 		try {
+			logger.trace("TASK=CLEARING_ORPHAN_DEPTAFFS SQL=" + ORPHANED_DEPTAFF_SQL);
 			PreparedStatement odaffPS = conn.prepareStatement(ORPHANED_DEPTAFF_SQL);
 			ResultSet odaffRS = odaffPS.executeQuery();
 			while(odaffRS.next()){
 				String oSFID = odaffRS.getString("sfid");
 				DeptAff thisDeptAff = new DeptAff(null,oSFID);
-				logger.warn(" TASK=ORPHAN_DEPTAFF_SEARCH STATUS=FOUND_ORPHAN SFID=" + oSFID);
+				logger.warn(" TASK=CLEARING_ORPHAN_DEPTAFFS STATUS=FOUND_ORPHAN SFID=" + oSFID);
 				this.deactivateDeptAff(thisDeptAff);
 			}
 			odaffRS.close();
 			odaffPS.close();
 		} catch (SQLException ex) {
-			logger.error("TASK=ORPHAN_DEPTAFF_CLEANUP STATUS=EXCEPTION",ex);
+			logger.error("TASK=CLEARING_ORPHAN_DEPTAFFS STATUS=EXCEPTION",ex);
 		}
-		
+		logger.info("TASK=CLEARING_ORPHAN_DEPTAFFS STATUS=FINISHED");
 		
 		
 	}
@@ -408,7 +414,7 @@ public class Persons {
 	 * Compares and updates Person, Affiliation, and Department-Affiliation object
 	 */
 	public void compareUpdatePersons(){
-		
+		logger.info("TASK=COMPARE_UPDATE_PERSONS STATUS=STARTING");
 		try {
 			deactivatePersonPS = conn.prepareStatement(SF_DEACTIVEATE_PERSON_SQL);
 			deactivateAffPS = conn.prepareStatement(SF_DEACTIVEATE_AFF_SQL);
@@ -433,18 +439,20 @@ public class Persons {
 			Person sfPerson = sfPeople.get(sfid);
 			String kerbID = sfPerson.getKerbID();
 			Person apiPerson = getAPIperson(kerbID);
+			logger.trace("TASK=COMPARE_UPDATE_PERSONS STATUS=LOADING_PEOPLE SFID=" + sfid + " KERBID=" + kerbID);
 			try{
 				//if apiPerson is null, this person isn't in the system, or he's Neo...
 				if(apiPerson == null){
-					
+					logger.trace("TASK=COMPARE_UPDATE_PERSONS STATUS=DEACTIVATING SFID=" + sfid + " KERBID=" + kerbID);
 					deactivatePerson(sfPerson);
 				}else if(sfPerson.isDuplicate()){
-					logger.warn(" TASK=COMPARING_PERSON STATUS=FOUND_DUPLICATE_KERBID KERBID=" + sfPerson.getKerbID() + " SFID=" + sfPerson.getSfID());
+					logger.warn(" TASK=COMPARE_UPDATE_PERSONS STATUS=FOUND_DUPLICATE_KERBID KERBID=" + sfPerson.getKerbID() + " SFID=" + sfPerson.getSfID());
 					deactivatePerson(sfPerson);
 				}else if(sfPerson.personFieldsEqual(apiPerson)){
 					//all is well, smiles all around
 				}else{
 					//we have two persons matching kerbID, now we just need to update SF person fields
+					logger.trace("TASK=COMPARE_UPDATE_PERSONS STATUS=UPDATING_PERSON SFID=" + sfid + " KERBID=" + kerbID);
 					updatePerson(apiPerson,sfPerson.getSfID());
 				}//end of if/else for person
 			}catch(Exception ex){
@@ -453,7 +461,7 @@ public class Persons {
 			}
 			
 			compareUpdateAffs(apiPerson.getAffs(),sfPerson.getAffs(),sfPerson.getSfID());
-			
+			logger.info("TASK=COMPARE_UPDATE_PERSONS STATUS=FINISHED");
 		}//end of while sfPeople has next
 		
 		
@@ -487,6 +495,7 @@ public class Persons {
 	 * @param personSFID  Salesforce 18 character ID of the person object these affilaition are associated with
 	 */
 	private void compareUpdateAffs(HashSet<Affiliation> apiAffs,HashSet<Affiliation> sfAffs, String personSFID){
+		logger.info("TASK=COMPARE_UPDATE_AFFILIATIONS STATUS=STARTING");
 //		HashSet<Affiliation> toUpdate = new HashSet<Affiliation>();
 //		HashSet<Affiliation> toAdd = new HashSet<Affiliation>();
 //		HashSet<Affiliation> toRemove = new HashSet<Affiliation>();
@@ -502,9 +511,9 @@ public class Persons {
 			sfLoop:
 			while(sfIT.hasNext()){
 				Affiliation sfAff = sfIT.next();
-				logger.debug(" TASK=COMPARING_AFFS SFID=" + sfAff.getSfID());
+				logger.trace(" TASK=COMPARE_UPDATE_AFFILIATIONS SFID=" + sfAff.getSfID());
 				if(sfAff.equalValues(apiAff)){
-					logger.debug(" TASK=COMPARING_AFFS SFID=" + sfAff.getSfID() + " STATUS=EQUAL_VALUES");
+					logger.trace(" TASK=COMPARE_UPDATE_AFFILIATIONS SFID=" + sfAff.getSfID() + " STATUS=EQUAL_VALUES");
 					aIT.remove();
 					sfIT.remove();
 					match = true;
@@ -520,7 +529,7 @@ public class Persons {
 			
 			if(!match){
 				//we didn't find a match, let's add this to SF
-				logger.info(" TASK=COMPARING_AFFS PERSON_SFID=" + personSFID + " STATUS=NO_MATCH");
+				logger.info(" TASK=COMPARE_UPDATE_AFFILIATIONS PERSON_SFID=" + personSFID + " STATUS=NO_MATCH_INSERTING");
 				insertAffiliation(apiAff,personSFID);
 				
 			}
@@ -529,15 +538,15 @@ public class Persons {
 		
 		//now we need to deactivate leftover sfAffs
 		Iterator<Affiliation> sfIT = sfAffs.iterator();
-		logger.debug(" TASK=REMOVING_OLD_AFFILIATIONS STATUS=STARTING");
+		logger.info(" TASK=COMPARE_UPDATE_AFFILIATIONS STATUS=REMOVING_OLD_AFFS");
 		while(sfIT.hasNext()){
 			Affiliation removeAff = sfIT.next();
-			logger.debug(" TASK=REMOVING_AFFILIATION SFID=" + removeAff.getSfID() );
+			logger.debug(" TASK=COMPARE_UPDATE_AFFILIATIONS STATUS=REMOVING_OLD_AFFS SFID=" + removeAff.getSfID() );
 			deactivateAff(removeAff);
 			
 			
 		}
-		
+		logger.info("TASK=COMPARE_UPDATE_AFFILIATIONS STATUS=FINISHED");
 	}//end of compareUpdateAffs
 	
 	/**
@@ -807,7 +816,9 @@ public class Persons {
 	}//end of deactivateDeptAff
 	
 	
-	
+	/**
+	 * as the name implies, it loads Salesforce people that are: active=true, from_api=true
+	 */
 	public void loadSFpeople(){
 		logger.trace("TASK=LOAD_SF_PEOPLE STATUS=STARTING SF_PEOPLE_SQL="  + SF_PEOPLE_SQL );
 		HashSet<String> kerbIDs = new HashSet<String>();
@@ -1128,12 +1139,16 @@ public class Persons {
 		
 	}//end of trimLogs
 	
+	/**
+	 * writes log information into the person_update_log object on the target schema
+	 * @param logText text to include along with some general update info
+	 */
 	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
 		//just in case we get a ginormous log
 		
-		String toWrite = getRunInfo() + logText;
+		String toWrite = getRunInfo() + "-----FULL LOG-----\n" +  logText;
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");

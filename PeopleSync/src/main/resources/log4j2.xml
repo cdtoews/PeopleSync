@@ -2,7 +2,7 @@
 <Configuration status="WARN">
 	<Appenders>
 		<Console name="Console" target="SYSTEM_OUT">
-			<PatternLayout pattern="[%-5level] %c{1}.%M - SCHEMA=$${ctx:current_schema} %msg%n" />
+			<PatternLayout pattern="[%-5level] SCHEMA=$${ctx:current_schema} - %c{1}.%M - %msg%n" />
 		</Console>
 		
 		 
