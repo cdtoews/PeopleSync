@@ -475,7 +475,7 @@ public class Persons {
 		}
 		if(updateSF){
 			trimLogs();
-			writeLog();
+			
 		}
 		
 	}//end of compareUpdate
@@ -1128,12 +1128,12 @@ public class Persons {
 		
 	}//end of trimLogs
 	
-	private void writeLog(){
+	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
 		//just in case we get a ginormous log
 		
-		String toWrite = getRunInfo();
+		String toWrite = getRunInfo() + logText;
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");

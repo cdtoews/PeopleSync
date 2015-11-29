@@ -1,5 +1,7 @@
 package edu.mit.ist.salesforce.sync;
 
+import edu.mit.ist.logging.StringAppender;
+
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -35,6 +37,7 @@ import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
@@ -50,6 +53,8 @@ public class Main {
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	public static final Integer MAX_LOG_SIZE = 130000;
+	private  StringAppender stringAppender;
+	public static final String stringAppenderFormat = "[%-5level] %d{yyyy-MM-dd HH:mm:ss.SSS} %c{1}.%M - %msg%n";
 	
 	public static final String[] DEPT_SYNC_PROPERTIES = new String[]{
 																"log_archive_days__c"
@@ -155,7 +160,12 @@ public class Main {
 		loggerConfig.setLevel(level);
 		ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig
 		logger.fatal("LOG_LEVEL=" + level.name());
-		
+		//start the string logger
+		//Logger Stringlogger = LogManager.getRootLogger();
+		// Create a String Appender to capture log output
+		stringAppender = StringAppender.createStringAppender(stringAppenderFormat);
+		stringAppender.addToLogger(logger.getName(), Level.INFO);
+		stringAppender.start();
 		
 		conn = getConnection();
 		//let's get our home schema
@@ -174,8 +184,9 @@ public class Main {
 	public  void run() throws URISyntaxException, SQLException{
 		ThreadContext.put("id", UUID.randomUUID().toString()); // Add the fishtag;
 		ThreadContext.put("current_schema", current_schema); 
-		//emailMe();
-		//TODO clean out the trash, items inserted that have no SFID, otherwise, we could keep dumping garbage into heroku db when connect breaks
+
+		
+
 		
 		//each sync instance is a different hashset of properties
 		HashSet<Properties> deptPropSet = new HashSet<Properties>();
@@ -200,6 +211,9 @@ public class Main {
 		TreeMap<String, Department> apiMap = getAPIdepts();
 		ThreadContext.put("comparing", "Departments"); 
 		
+//		logger.fatal("test message");
+//		System.out.println("\n\n---------------------------\n" + stringAppender.getOutput());
+		
 		//-------------------------------------------
 		//---------- Main Dept work loop ------------
 		//-------------------------------------------
@@ -208,18 +222,19 @@ public class Main {
 			//for(String syncProp:SYNC_PROPERTIES){
 			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
 			//}
-			
+			resetLog();
 			current_schema = eachProp.getProperty("name");
 			ThreadContext.put("current_schema", current_schema); 
-			
+			//resetLog();
 			logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
 			//writeLog(" STATUS=STARTING_SCHEMA");
 			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
 			depts.loadData();
 			depts.CompareUpdate();
-			recordDeptLog(depts.getRunInfo(),eachProp.getProperty("sfid"));
+			depts.writeLog(getLog());
+			recordDeptLog( depts.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
 			logger.info(" STATUS=FINISHED_SCHEMA");
-			
+			System.out.println("string appender output:");
 		}//end of looping through properties (sync sets)
 		
 		
@@ -253,14 +268,15 @@ public class Main {
 		//---------- Main People work loop ----------
 		//-------------------------------------------
 		for(Properties eachProp:peoplePropSet){
-			//resetTempLog();
+			resetLog();
 			current_schema = eachProp.getProperty("schema_name__c");
 			ThreadContext.put("current_schema", current_schema); 
 			Persons persons = new Persons(conn, eachProp);
 			//persons.clearOrphans();
 			persons.loadSFpeople();
 			persons.compareUpdatePersons();
-			recordPeopleLog(persons.getRunInfo(),eachProp.getProperty("sfid"));
+			persons.writeLog(getLog());
+			recordPeopleLog(persons.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
 		}
 		
 		
@@ -440,6 +456,42 @@ public class Main {
 	    return DriverManager.getConnection(dbUrl, username, password);
 	}
 	
+	/**
+	 * gets the log output from a stringAppender without resetting string appender
+	 * @return
+	 */
+	public String getLog(){
+		return getLog(false);
+	}
+	
+	/**
+	 * gets the log output from a string appender, 
+	 * @param resetLog whether to reset the log, clearing it
+	 * @return
+	 */
+	public String getLog(boolean resetLog){
+		String result = stringAppender.getOutput();
+		if(resetLog){
+			resetLog();
+		}
+		return result;
+	}
+	
+	/**
+	 * resets the log, emptying the string
+	 */
+	public void resetLog(){
+		//Logger Stringlogger = LogManager.getRootLogger();
+		try{
+			stringAppender.removeFromLogger(LogManager.getRootLogger().getName());
+		}catch(NullPointerException ex){
+			logger.warn("couldn't remove stringAppender from logger");
+		}
+		
+		stringAppender = StringAppender.createStringAppender(stringAppenderFormat);
+		stringAppender.addToLogger(logger.getName(), Level.INFO);
+		stringAppender.start();
+	}
 	
 //	public static String writeLog(String whatToWrite){
 //		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;

@@ -119,7 +119,7 @@ public class Departments {
 			insertDepts();
 			updateDepts();
 			trimLogs();
-			writeLog();
+			
 		}else{
 			logger.info(" STATUS=NOT_UPDATING_SF");
 		}
@@ -337,12 +337,12 @@ public class Departments {
 	}//end of trimLogs
 	
 	
-	private void writeLog(){
+	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
 		//just in case we get a ginormous log
 		
-		String toWrite = getRunInfo();
+		String toWrite = getRunInfo() + logText;
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
@@ -450,6 +450,7 @@ public class Departments {
 		result += "Departments Updated=" + deptsUpdated + cr;
 		result += "Departments Deactivated=" + deptsDeactivated + cr;
 		result += "API Dept Count=" + apiDeptCount + cr;
+		result += "--------------------------------" + cr;
 		
 		return result;
 	}
