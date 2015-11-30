@@ -53,11 +53,11 @@ public class Main {
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	public static final Integer MAX_LOG_SIZE = 130000;
-	private  StringAppender stringAppender;
+	private  StringAppender stringAppender;//used to store log as a string to send to Salesforce objects
 	public static final String stringAppenderFormat = "[%-5level] %d{yyyy-MM-dd HH:mm:ss.SSS} %c{1}.%M - %msg%n";
 	
 	public static final String[] DEPT_SYNC_PROPERTIES = new String[]{
-																"log_archive_days__c"
+																"log_archive_days__c"//days to keep logs before deleting them, -1 to never delete
 																,"log_text_field__c"
 																,"orgunitid_field__c"
 																,"from_api_field__c"
@@ -77,8 +77,8 @@ public class Main {
 	
 	public static final String[] PEOPLE_SYNC_PROPERTIES = new String[]{
 		"schema_name__c" //name of schema in Heroku Connect
-		,"sfid" //SFID of the row holding this info, so we can update with log
-		,"sync_active__c" //is this item active,
+		,"sfid" //SFID of the row holding this info, so we can update with log info
+		,"sync_active__c" //is this item active, when inactive, the item will not even be looked at
 		,"update_salesforce__c" // should this item update salesforce
 		//------- Log -----------
 		,"log_object_name__c" //name of object to hold person sync logs
@@ -96,11 +96,11 @@ public class Main {
 		,"person_email_field__c"
 		,"person_phone_number_field__c"
 		,"person_website_field__c"
-		,"person_log_changes__c" //should the sync update field on person object of changes
-		,"person_update_notes_field__c"//optional field for log of person changes
+		,"person_log_changes__c" //should the sync update field on person object of changes, not currently in use
+		,"person_update_notes_field__c"//optional field for log of person changes, not currently in use
 		,"person_from_api_field__c" //checkbox used to designate if 'person' is from API
 		,"person_active_field__c" //checkbox marked false when person not active in API
-		,"person_active_date_field__c" //date field populated on first sync. not used if sync not populating SF
+		,"person_active_date_field__c" //date field populated when inserted using apex insertion. not used if sync not populating SF
 		,"person_inactive_date_field__c" //date field populated when kerbID not active in API
 		//------- affiliation -----------
 		,"affiliation_object_name__c"
@@ -183,7 +183,7 @@ public class Main {
 	
 	public  void run() throws URISyntaxException, SQLException{
 		ThreadContext.put("id", UUID.randomUUID().toString()); // Add the fishtag;
-		ThreadContext.put("current_schema", current_schema); 
+		ThreadContext.put("current_schema", current_schema); //used in console logging to know what schema we are in
 
 		
 
@@ -195,6 +195,8 @@ public class Main {
 		PreparedStatement syncListPS = conn.prepareStatement("select * from " + home_schema + ".dept_sync__c where sync_active__c = true");
 		ResultSet syncListRS = syncListPS.executeQuery();
 		while(syncListRS.next()){
+			String thisSchema = syncListRS.getString("name");
+			ThreadContext.put("current_schema", thisSchema); 
 			//let's load up a properties object for each record
 			Properties thisProp = new Properties();
 			for(String syncProp:DEPT_SYNC_PROPERTIES){
@@ -218,17 +220,14 @@ public class Main {
 		//---------- Main Dept work loop ------------
 		//-------------------------------------------
 		for(Properties eachProp:deptPropSet){
-			//System.out.println("---------start properties---------------");
-			//for(String syncProp:SYNC_PROPERTIES){
-			//	System.out.println(syncProp + "\t " + eachProp.getProperty(syncProp));
-			//}
-			resetLog();
+			
+			resetLog();//reset the stringAppender
 			current_schema = eachProp.getProperty("name");
 			ThreadContext.put("current_schema", current_schema); 
 			//resetLog();
 			logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
 			//writeLog(" STATUS=STARTING_SCHEMA");
-			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap. 
+			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap.(so we don't have to poll API ever schema
 			depts.loadData();
 			depts.CompareUpdate();
 			depts.writeLog(getLog());
@@ -240,8 +239,8 @@ public class Main {
 		
 		
 		//-------- People ------------
-		
-		
+		ThreadContext.put("current_schema", "INITIALIZING_PEOPLE"); 
+		logger.info(" TASK=LOADING_PEOPLE_PROPERTIES");
 		//each sync instance is a different hashset of properties
 		HashSet<Properties> peoplePropSet = new HashSet<Properties>();
 		
@@ -250,11 +249,12 @@ public class Main {
 		ResultSet psyncListRS = psyncListPS.executeQuery();
 		while(psyncListRS.next()){
 			//let's load up a properties object for each record
-			
+			String thisSchema = psyncListRS.getString("schema_name__c");
+			ThreadContext.put("current_schema", thisSchema); 
 			Properties thisProp = new Properties();
 			for(String syncProp:PEOPLE_SYNC_PROPERTIES){
 				String thisValue = psyncListRS.getString(syncProp);
-				logger.trace("TASK=LOADING_DEPT_VALUES " + syncProp + "=" + thisValue );
+				logger.trace("TASK=LOADING_PERSON_VALUES " + syncProp + "=" + thisValue );
 				thisProp.put(syncProp, thisValue);
 			}
 			peoplePropSet.add(thisProp);
@@ -273,16 +273,13 @@ public class Main {
 			//put the current schema where the logger can get it
 			ThreadContext.put("current_schema", current_schema); 
 			Persons persons = new Persons(conn, eachProp);
-			//persons.clearOrphans();
+			//persons.clearOrphans();//orphans get cleared during comparisons
 			persons.loadSFpeople();
 			persons.compareUpdatePersons();
 			persons.writeLog(getLog());
 			recordPeopleLog(persons.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
 		}
-		
-		
-		
-		
+
 
 		conn.close();
 		
@@ -291,7 +288,7 @@ public class Main {
 	
 	public static  TreeMap<String, Department> getAPIdepts(){
 		TreeMap<String, Department> apiMap = new TreeMap<String, Department>();
-		logger.info(" TASK=LOAD_API_DATA STATUS=STARTING");
+		logger.info(" TASK=LOAD_DEPT_API_DATA STATUS=STARTING");
 		try {
 			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
 					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
@@ -300,34 +297,34 @@ public class Main {
 					  .header("cache-control", "no-cache")
 					  //.header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
 					  .asString();
-			
+			logger.trace(" TASK=LOAD_DEPT_API_DATA  STATUS=RECEIVED_JSON RAW_JASON=" + response.getBody());
 			JSONObject responeJson = new JSONObject(response.getBody());
             int listSize = responeJson.getJSONObject("metadata").getInt("size");
-			
+			logger.trace(" TASK=LOAD_DEPT_API_DATA STATUS=RECEIVED_DATA LIST_SIZE=" + listSize);
            
             JSONArray jsonArray = responeJson.getJSONArray("items");
 
             
             for (int i=0;i<jsonArray.length();i++){
-            	apiMap.put(jsonArray.getJSONObject(i).getString("orgUnitId"), 
-            			new Department(jsonArray.getJSONObject(i).getString("orgUnitId"),
-            					jsonArray.getJSONObject(i).getString("name") )
-            			);
-            	
+            	String thisOrgUnitID = jsonArray.getJSONObject(i).getString("orgUnitId");
+            	String thisName = jsonArray.getJSONObject(i).getString("name");
+            	apiMap.put(thisOrgUnitID, 	new Department(thisOrgUnitID,thisName )	);
+            	logger.trace(" TASK=LOAD_DEPT_API_DATA  STATUS=LOADING_DEPTS ORGUNITID=" + thisOrgUnitID + " NAME=\"" + thisName + "\"");
             	//System.out.println("orgUnitId : "+jsonArray.getJSONObject(i).getString("orgUnitId"));
                 //System.out.println("name : "+jsonArray.getJSONObject(i).getString("name"));
             }
-            logger.info(" TASK=LOAD_API_DATA COUNT=" + listSize);
+            logger.info(" TASK=LOAD_DEPT_API_DATA COUNT=" + listSize);
             if(apiMap.size() != listSize){
-            	logger.info(" TASK=LOAD_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
+            	logger.info(" TASK=LOAD_DEPT_API_DATA STATUS=ERROR NOTE=WRONG_SIZE METADATA_SIZE=" + listSize + " ITEMS_RECEIVED=" + apiMap.size());
             	System.exit(1);
             }
 			
 		} catch (UnirestException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			
+			logger.error("TASK=LOAD_DEPT_API_DATA STATUS=EXCEPTION " , e);
+			
 		}
-		logger.info(" TASK=LOAD_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
+		logger.info(" TASK=LOAD_DEPT_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
 		return apiMap;
 	}
 	
@@ -337,7 +334,7 @@ public class Main {
 	 * @param sfID is the SFID of the dept_sync object to update
 	 */
 	private void recordDeptLog(String logText, String sfID){
-		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
+		logger.info(" TASK=RECORDING_DEPT_LOG STATUS=STARTING");
 		try{
 			PreparedStatement recordPS = conn.prepareStatement(RECORD_DEPT_LOG_SQL.replace("<home_schema>", home_schema));
 			int c=1;
@@ -345,15 +342,15 @@ public class Main {
 			recordPS.setString(c++, sfID);
 			Integer numUpdated = recordPS.executeUpdate();
 			if(numUpdated != null && numUpdated == 1){
-				logger.info(" TASK=RECORDING_LOG STATUS=SUCCESS");
+				logger.info(" TASK=RECORDING_DEPT_LOG STATUS=SUCCESS");
 			}else{
-				logger.info(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
+				logger.info(" TASK=RECORDING_DEPT_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
 			}
 		}catch(SQLException ex){
-			logger.info(" TASK=RECORDING_LOG STATUS=EXCEPTION");
+			logger.info(" TASK=RECORDING_DEPT_LOG STATUS=EXCEPTION");
 		}
 		
-		logger.info(" TASK=RECORDING_LOG STATUS=FINISHED");
+		logger.info(" TASK=RECORDING_DEPT_LOG STATUS=FINISHED");
 		
 	}
 	
@@ -363,7 +360,7 @@ public class Main {
 	 * @param sfID is the salesforce ID of the object on the home schema
 	 */
 	private void recordPeopleLog(String logText, String sfID){
-		logger.info(" TASK=RECORDING_LOG STATUS=STARTING");
+		logger.info(" TASK=RECORDING_PEOPLE_LOG STATUS=STARTING");
 		try{
 			PreparedStatement recordPS = conn.prepareStatement(RECORD_PEOPLE_LOG_SQL.replace("<home_schema>", home_schema));
 			int c=1;
@@ -371,15 +368,15 @@ public class Main {
 			recordPS.setString(c++, sfID);
 			Integer numUpdated = recordPS.executeUpdate();
 			if(numUpdated != null && numUpdated == 1){
-				logger.info(" TASK=RECORDING_LOG STATUS=SUCCESS");
+				logger.info(" TASK=RECORDING_PEOPLE_LOG STATUS=SUCCESS");
 			}else{
-				logger.info(" TASK=RECORDING_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
+				logger.info(" TASK=RECORDING_PEOPLE_LOG STATUS=FAILURE NUMUPDATED=" + numUpdated);
 			}
 		}catch(SQLException ex){
-			logger.info(" TASK=RECORDING_LOG STATUS=EXCEPTION");
+			logger.info(" TASK=RECORDING_PEOPLE_LOG STATUS=EXCEPTION");
 		}
 		
-		logger.info(" TASK=RECORDING_LOG STATUS=FINISHED");
+		logger.info(" TASK=RECORDING_PEOPLE_LOG STATUS=FINISHED");
 		
 	}
 	
@@ -489,7 +486,7 @@ public class Main {
 	}
 	
 	/**
-	 * resets the log, emptying the string
+	 * resets the stringAppender (used for gathering a log per schema), emptying the string
 	 */
 	public void resetLog(){
 		//Logger Stringlogger = LogManager.getRootLogger();
@@ -503,30 +500,34 @@ public class Main {
 		stringAppender.addToLogger(logger.getName(), Level.INFO);
 		stringAppender.start();
 	}
+
+
+	/**
+	 * trims log files that might be too long for SF fields
+	 * @param input String to look at
+	 * @return String to return, possibly truncated
+	 */
+	public static String trimLongString(String input){
+		return trimLongString(input,MAX_LOG_SIZE);
+	}
 	
-//	public static String writeLog(String whatToWrite){
-//		String  result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " " + whatToWrite;
-//		System.out.println(result);
-//		return result;
-//	}
-//	
-//	public static String writeLog(Person person, String whatToWrite){
-//		String kerbID = person.getKerbID();
-//		String sfID = person.getSfID();
-//		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " KERBEROS_ID=" + kerbID + " SFID=" + sfID + " " + whatToWrite;
-//		System.out.println(result);
-//		return result;
-//	}
-//	
-//	public static String writeLog(Department dept, String whatToWrite){
-//		String orgUnitID = dept.getOrgUnitID();
-//		String Name = dept.getName();
-//		String sfID = dept.getSfID();
-//		String result = DATE_FORMAT.format(new Date())  + " APP=" + APP_NAME + " SCHEMA=" + current_schema + " ORGUNITID=" + orgUnitID + " NAME=\"" + Name + "\" SFID=" + sfID + " " + whatToWrite;
-//		System.out.println(result);
-//		return result;
-//		
-//	}
+	/**
+	 * Trims log files that might be too long for SF fields
+	 * @param input  String to look at
+	 * @param maxSize Maximum size of the String, leave some wiggle room for the "...more..."
+	 * @return returns string, possibly truncated
+	 */
+	public static String trimLongString(String input, Integer maxSize){
+		String result;
+		if(input.length() > maxSize){
+			result = input.substring(0, maxSize) + "\n...more...";
+		}else{
+			result = input;
+		}
+		
+		
+		return result;
+	}
 	
 	public static String getEnvInfo(){
 		String result = "";

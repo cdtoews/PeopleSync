@@ -85,6 +85,7 @@ public class Departments {
 		
 		this.apiMap  = apiMap;
 		apiDeptCount = this.apiMap.size();
+		logger.trace(" API_DEPT_MAP_SIZE=" + apiDeptCount);
 		sfMap   = new TreeMap<String, Department>();
 		addMap  = new TreeMap<String, Department>();
 		//make my queries specific to this instance
@@ -96,7 +97,11 @@ public class Departments {
 		INSERT_LOG_SQL = replaceProps(INSERT_LOG_SQL_BASE);
 	}
 	
-	
+	/**
+	 * This replaces all the variables in each SQL statement with schema specific values
+	 * @param input is the base SQL statement
+	 * @return returns the SQL statement specific to this schema
+	 */
 	private  String replaceProps(String input){
 		String output = input;
 		for(String eachProp:Main.DEPT_SYNC_PROPERTIES){
@@ -139,7 +144,7 @@ public class Departments {
 	
 	private  void loadSFdepts(){
 		try {
-			logger.info(" TASK=LOAD_SF_DATA STATUS=STARTING");
+			logger.info(" TASK=LOAD_SF_DEPTS STATUS=STARTING");
 			String OrgIDField = props.getProperty("orgunitid_field__c");
 			String nameField = props.getProperty("name_field__c");
 			
@@ -147,11 +152,11 @@ public class Departments {
 			ResultSet readRS = readPS.executeQuery();
 			while(readRS.next()){
 				//System.out.println(readRS.getString("sfid") + "  " + readRS.getString("name"));
-				sfMap.put(readRS.getString(OrgIDField), 
-            			new Department(readRS.getString(OrgIDField),
-            				readRS.getString(nameField),
-            				readRS.getString("sfid"))
-            			);
+				String thisOrgunitID = readRS.getString(OrgIDField);
+				String thisSFID = readRS.getString("sfid");
+				String thisName = readRS.getString(nameField);
+				logger.trace(" TASK=LOAD_SF_DEPTS ORGUNITID=" + thisOrgunitID + " SFID=" + thisSFID + " NAME=" + thisName);
+				sfMap.put(thisOrgunitID, new Department(thisOrgunitID, readRS.getString(nameField), thisSFID) );
 			}
 			
 			readRS.close();
@@ -166,7 +171,7 @@ public class Departments {
 	
 	
 	private void compareMaps(){
-		logger.info(" TASK=COMPARE_DATA STATUS=STARTING");
+		logger.info(" TASK=COMPARE_DEPT_DATA STATUS=STARTING");
 		Iterator<String> it = apiMap.keySet().iterator();
 		while(it.hasNext()){
 			String apiID = it.next();
@@ -177,11 +182,12 @@ public class Departments {
 				Department sfDept = sfMap.get(apiID);
 				if(sfDept.getName().equals(apiDept.getName())){
 					//everything matches, remove from both maps
+					logger.trace(" TASK=COMPARE_DEPT_DATA STATUS=DEPT_EQUAL ORGUNITID=" + apiID + " SFID=" + sfDept.getSfID());
 					it.remove();
 					sfMap.remove(apiID);
 				}else{
 					//set sfID for the dept so we can use it to update later
-					logger.info( " STATUS=DIFFERENCE_FOUND API_NAME=\"" + apiDept.getName() + "\" SFID=" + sfDept.getSfID() );
+					logger.info( " STATUS=DIFFERENCE_FOUND ORGUNITID=" + apiID + " SFID=" + sfDept.getSfID() +  " API_NAME=\"" + apiDept.getName() + "\" SF_NAME=\"" + sfDept.getName() + "\"" );
 					apiDept.setSfID(sfMap.get(apiID).getSfID());
 					sfMap.remove(apiID);
 				}
@@ -228,7 +234,7 @@ public class Departments {
 	}//end of deactivateDepts
 	
 	private void insertDepts(){
-		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=STARTING");
+		logger.info(" TASK=INSERTING_DEPTS STATUS=STARTING");
 		
 		try{
 			PreparedStatement insertPS = conn.prepareStatement(INSERT_ACCOUNT_SQL);
@@ -244,23 +250,23 @@ public class Departments {
 				insertPS.setString(c++, thisID);
 				int numUpdated = insertPS.executeUpdate();
 				if(numUpdated == 1){
-					logger.debug( " TASK=INSERTING_ACCOUNT STATUS=SUCCESS " + thisDept.quickinfo());
+					logger.info( " TASK=INSERTING_DEPTS STATUS=SUCCESS " + thisDept.quickinfo());
 				}else{
-					logger.error( " TASK=INSERTING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo() );
+					logger.error( " TASK=INSERTING_DEPTS STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo() );
 				}
 			}
 			insertPS.close();
 			
 		}catch(SQLException ex){
-			logger.error(" TASK=INSERTING_ACCOUNTS STATUS=EXCEPTION",ex);
+			logger.error(" TASK=INSERTING_DEPTS STATUS=EXCEPTION",ex);
 			
 		}
-		logger.info(" TASK=INSERTING_ACCOUNTS STATUS=FINISHED COUNT=" + deptsCreated);
+		logger.info(" TASK=INSERTING_DEPTS STATUS=FINISHED COUNT=" + deptsCreated);
 		
 	}
 	
 	private void updateDepts(){
-		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=STARTING");
+		logger.info(" TASK=UPDATING_DEPTS STATUS=STARTING");
 		
 		try{
 			PreparedStatement updatePS = conn.prepareStatement(UPDATE_ACCOUNT_SQL);
@@ -278,17 +284,17 @@ public class Departments {
 				updatePS.setString(c++, thisSFid);
 				int numUpdated = updatePS.executeUpdate();
 				if(numUpdated == 1){
-					logger.info(" TASK=UPDATING_ACCOUNT STATUS=SUCCESS " + thisDept.quickinfo() );
+					logger.info(" TASK=UPDATING_DEPTS STATUS=SUCCESS " + thisDept.quickinfo() );
 				}else{
-					logger.error(" TASK=UPDATING_ACCOUNT STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo());
+					logger.error(" TASK=UPDATING_DEPTS STATUS=ERROR UPDATE_COUNT=" + numUpdated + thisDept.quickinfo());
 				}
 			}
 			updatePS.close();
 		}catch(SQLException ex){
-			logger.error(" TASK=UPDATING_ACCOUNTS STATUS=EXCEPTION",ex);
+			logger.error(" TASK=UPDATING_DEPTS STATUS=EXCEPTION",ex);
 			ex.printStackTrace();
 		}
-		logger.info(" TASK=UPDATING_ACCOUNTS STATUS=FINISHED COUNT=" + deptsUpdated);
+		logger.info(" TASK=UPDATING_DEPTS STATUS=FINISHED COUNT=" + deptsUpdated);
 	}
 	
 	public static String listDepts(TreeMap<String, Department> thisMap){
@@ -310,6 +316,9 @@ public class Departments {
 		return result;
 	}
 	
+	/**
+	 * trims logs on the target schema. deleting logs more than X days old (set in the SF object holding schema info(located in home schema))
+	 */
 	private void trimLogs(){
 		logger.info(" TASK=TRIMMING_LOGS STATUS=STARTING");
 		//first how many days are we going back
@@ -349,9 +358,10 @@ public class Departments {
 	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
-		//just in case we get a ginormous log
+		
 		
 		String toWrite = getRunInfo() + "-----FULL LOG-----\n"  + logText;
+		toWrite = Main.trimLongString(toWrite);
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
@@ -465,25 +475,5 @@ public class Departments {
 	}
 	
 	
-//	public String getMyLog() {
-//		return myLog;
-//	}
-//
-//	public String getMyLog(int sizeLimit){
-//		String result = myLog;
-//		if(result.length() > Main.MAX_LOG_SIZE){
-//			result = result.substring(0, sizeLimit);
-//		}
-//		return result;
-//	}
 
-
-	//private void logThis(String whatToWrite){
-	//	myLog += Main.writeLog(whatToWrite) + "\n";
-	//}
-	
-	//private void logThis(Department dept,String whatToWrite){
-	//	myLog += Main.writeLog(dept, whatToWrite) + "\n";
-	//}
-	
 }

@@ -95,7 +95,7 @@ public class Persons {
 			  + " 		deptaff.<deptaff_affiliation_lookup_field__c> = aff.sfid  \n "
 			  + " 		and deptaff.<deptaff_active_field__c> = true	\n "
 			  + "		and deptaff.<deptaff_from_api_field__c> = true	\n "
-			  + "  where 	\n "
+			  + " where 	\n "
 			  + " 		person.<person_active_field__c> = true	\n "
 			  + "		and person.<person_from_api_field__c> = true	\n "
 			  + " order by person.createddate asc	\n ";
@@ -1098,29 +1098,35 @@ public class Persons {
 		
 	}//end of parsePersonJson
 	
+	/**
+	 * changes Base SQL statements to be schema specific
+	 * @param input input the Base SQL statement
+	 * @return returns the customized SQL statement for this schema
+	 */
 	private  String replaceProps(String input){
 		String output = input;
 		for(String eachProp:Main.PEOPLE_SYNC_PROPERTIES){
 			output = output.replace("<" + eachProp + ">", this.props.getProperty(eachProp));
 		}
+		logger.trace(" TASK=CUSOMIZING SQL INPUT=\"" + input + "\" OUTPUT=\"" + output + "\"");
 		return output;
 		
 	}
 	
 	private void trimLogs(){
-		logger.info(" TASK=TRIMMING_LOGS STATUS=STARTING");
+		logger.info(" TASK=TRIMMING_PEOPLE_LOGS STATUS=STARTING");
 		//first how many days are we going back
 		Integer daysBack = null;
 		try{
 			daysBack = Integer.parseInt((String) this.props.get("log_archive_days__c"));
 		}catch(Exception ex){
-			logger.error(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING REASON=NO_VALID_VALUE", ex);
+			logger.error(" TASK=TRIMMING_PEOPLE_LOGS STATUS=NOT_TRIMMING REASON=NO_VALID_VALUE", ex);
 			//didn't get a good number back, let's just go home now
 			return;
 		}
 		
 		if(daysBack == null || daysBack < 0){
-			logger.info(" TASK=TRIMMING_LOGS STATUS=NOT_TRIMMING");
+			logger.info(" TASK=TRIMMING_PEOPLE_LOGS STATUS=NOT_TRIMMING");
 			//negative number or null, no trimming
 			
 			return;
@@ -1130,10 +1136,10 @@ public class Persons {
 			PreparedStatement trimPS = conn.prepareStatement(TRIM_LOGS_SQL);
 			int numTrimmed = trimPS.executeUpdate();
 			trimPS.close();
-			logger.info(" TASK=TRIMMING_LOGS STATUS=COMPLETE UPDATED=" + numTrimmed);
+			logger.info(" TASK=TRIMMING_PEOPLE_LOGS STATUS=FINISHED UPDATED=" + numTrimmed);
 			
 		}catch(SQLException ex){
-			logger.error(" TASK=TRIMMING_LOGS STATUS=ERROR",ex);
+			logger.error(" TASK=TRIMMING_PEOPLE_LOGS STATUS=ERROR",ex);
 			
 		}
 		
@@ -1146,9 +1152,10 @@ public class Persons {
 	public void writeLog(String logText){
 		logger.info(" TASK=WRITING_LOG STATUS=STARTING");
 		
-		//just in case we get a ginormous log
-		
 		String toWrite = getRunInfo() + "-----FULL LOG-----\n" +  logText;
+		toWrite = Main.trimLongString(toWrite);
+		
+		
 		String logObject = (String) props.get("log_object_name__c");
 		if (logObject == null || logObject.equals("") ){
 			logger.info(" TASK=WRITING_LOG STATUS=SKIPPING");
