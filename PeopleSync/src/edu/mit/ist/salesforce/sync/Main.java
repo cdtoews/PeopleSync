@@ -145,6 +145,8 @@ public class Main {
 			level = Level.DEBUG;
 		}else if("WARN".equalsIgnoreCase(levelString)){
 			level = Level.WARN;
+		}else if("INFO".equalsIgnoreCase(levelString)){
+			level = Level.INFO;
 		}else if("ERROR".equalsIgnoreCase(levelString)){
 			level = Level.ERROR;
 		}else if("FATAL".equalsIgnoreCase(levelString)){
@@ -154,14 +156,15 @@ public class Main {
 			level = Level.INFO;
 		}
 		
+		
 		LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
 		Configuration config = ctx.getConfiguration();
 		LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME); 
 		loggerConfig.setLevel(level);
-		ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig
+		ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig.
+		
 		logger.fatal("LOG_LEVEL=" + level.name());
-		//start the string logger
-		//Logger Stringlogger = LogManager.getRootLogger();
+
 		// Create a String Appender to capture log output
 		stringAppender = StringAppender.createStringAppender(stringAppenderFormat);
 		stringAppender.addToLogger(logger.getName(), Level.INFO);

@@ -9,7 +9,7 @@
 	</Appenders>
 	 <loggers>     
     <root level="trace">
-      <appender-ref ref="Console" level="DEBUG"/>
+      <appender-ref ref="Console" level="TRACE"/>
       
     </root>    
   </loggers>
