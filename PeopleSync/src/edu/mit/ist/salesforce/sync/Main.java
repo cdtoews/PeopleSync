@@ -38,6 +38,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 
+
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
@@ -50,6 +51,8 @@ public class Main {
 	Connection conn;
 	public static String current_schema = "INITIALIZING";
 	public String home_schema = "INITIALIZING";
+	public static String api_id;
+	public static String api_secret;
 	public static final String APP_NAME = "PEOPLE_SYNC";
 	public static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("M-dd-yyyy HH:mm:ss");
 	public static final Integer MAX_LOG_SIZE = 130000;
@@ -173,6 +176,8 @@ public class Main {
 		conn = getConnection();
 		//let's get our home schema
 		home_schema = System.getenv("HOME_SCHEMA");
+		api_id = System.getenv("api_id");
+		api_secret = System.getenv("api_secret");
 	}
 	
 	
@@ -296,8 +301,8 @@ public class Main {
 		try {
 			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/departments/v1/departments")
 					  .header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
-					  .header("client_id", "6bf28c0fe7f74a3abefddef2c49d9c37")
-					  .header("client_secret", "9d1b04d804734133810FDA06CC41C163")
+					  .header("client_id", api_id)
+					  .header("client_secret", api_secret)
 					  .header("cache-control", "no-cache")
 					  //.header("postman-token", "e52a374d-1022-49d3-6f1a-ed7bcb6aa4e1")
 					  .asString();
@@ -431,22 +436,78 @@ public class Main {
 		}
 	}//end of main
 	
-	public static String readTempLog(){
-		//we are assuming log is /logs/temp.log
-		if(true) return "logs coming soon";
-		String result = "";
+	public static String parseJsonError(HttpResponse<String> response){
+		String result;
+		String status;
 		try{
-			byte[] encoded = Files.readAllBytes(Paths.get("logs/temp.log"));
-			  result = new String(encoded, "UTF-8");
-				if(result.length() > MAX_LOG_SIZE){
-					result = result.substring(0, MAX_LOG_SIZE);
-				}
+			status = Integer.toString(response.getStatus());
 		}catch(Exception ex){
-			ex.printStackTrace();
-			result = "unable to read file";
+			status = "unknown";
+			logger.error("TASK=PARSE_JSON_ERROR STATUS=EXCEPTION NOTE=UNABLE_TO_GET_STATUS ",ex);
 		}
+		if(response.getStatus() == 200){
+			//we shouldn't get here, this should be an error
+			result = "TASK=PARSE_JSON_ERROR STATUS=NO_ERROR STATUS=" + status ;
+			logger.trace(result);
+		}else if(response.getStatus() == 400){
+			try{
+				JSONObject responseJson = new JSONObject(response.getBody());
+				String errorMessage = responseJson.optString("errorMessage", "");
+				String errorCode = responseJson.optString("errorCode", "");
+				JSONArray errorJson = responseJson.optJSONArray("errorDetails");
+				String errorDetailMessage;
+				if(errorJson == null || errorJson.length() == 0){
+					errorDetailMessage = "";
+				}else{
+					errorDetailMessage = "";
+					for(int i=0;i<errorJson.length();i++){
+						errorDetailMessage += i + ":" + errorJson.optJSONObject(i).optString("message", "");
+					}
+				}
+				
+				result = "TASK=PARSE_JSON_ERROR STATUS=PARSING_ERROR STATUS=" + status + " ERROR_MESSAGE=" + errorMessage + " ERROR_CODE=" + errorCode + " ERROR_DETAIL=" + errorDetailMessage;
+				logger.error(result);
+			}catch(Exception ex){
+				result = "TASK=PARSE_JSON_ERROR STATUS=EXCEPTION STATUS=" + status ;
+				logger.error(result,ex);
+				result += ex.getMessage();
+			}//end of try/catch for response code 400
+		}else if(response.getStatus() == 404){
+			//bad URL
+			try{
+				String body = response.getBody();
+				result = "TASK=PARSE_JSON_ERROR STATUS=" + status + " BODY=" + body ;
+				logger.trace(result);
+			}catch(Exception ex){
+				result = "TASK=PARSE_JSON_ERROR STATUS=EXCEPTION STATUS=" + status ;
+				logger.error(result,ex);
+				result += ex.getMessage();
+			}
+			
+		}else{
+			result = "TASK=PARSE_JSON_ERROR STATUS=UNKNOWN_ERROR STATUS=" + status ;
+		}
+		
 		return result;
-	}//end of 
+	}//end of parseJsonError
+	
+	
+//	public static String readTempLog(){
+//		//we are assuming log is /logs/temp.log
+//		if(true) return "logs coming soon";
+//		String result = "";
+//		try{
+//			byte[] encoded = Files.readAllBytes(Paths.get("logs/temp.log"));
+//			  result = new String(encoded, "UTF-8");
+//				if(result.length() > MAX_LOG_SIZE){
+//					result = result.substring(0, MAX_LOG_SIZE);
+//				}
+//		}catch(Exception ex){
+//			ex.printStackTrace();
+//			result = "unable to read file";
+//		}
+//		return result;
+//	}//end of 
 	
 	
 //	public static void resetTempLog(){

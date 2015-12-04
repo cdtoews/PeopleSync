@@ -314,7 +314,17 @@ public class Persons {
 		//Persons me = new Persons(null,new Properties());
 		//me.getAPIperson("elander");
 		//me.getAPIperson("ctoews");
-		System.out.print(getAPIperson("bogus").toString());
+		Main main = new Main();
+		String[] names = new String[]{"bogus","elander","ctoews"};
+		for(String name:names){
+			try{
+				System.out.print(getAPIperson(name).toString());
+			}catch(Exception ex){
+				//logger.error("Whoopsie!",ex);
+			}
+		}
+		
+		
 		//JSONObject testJson = new JSONObject(TEST_JSON_STRING);
 		//Person testPerson = parsePersonJson(testJson); 
 		//System.out.print(testPerson.toString());
@@ -443,7 +453,11 @@ public class Persons {
 			try{
 				//if apiPerson is null, this person isn't in the system, or he's Neo...
 				if(apiPerson == null){
-					logger.trace("TASK=COMPARE_UPDATE_PERSONS STATUS=DEACTIVATING SFID=" + sfid + " KERBID=" + kerbID);
+					//apiPerson is null, that means a bad response, or an exception
+					logger.error("TASK=COMPARE_UPDATE_PERSONS STATUS=ERROR SFID=" + sfid + " KERBID=" + kerbID);
+				}else if(apiPerson.isMissing()){
+					//this means a valid response from the api, but not a person
+					logger.info("TASK=COMPARE_UPDATE_PERSONS STATUS=DEACTIVATING SFID=" + sfid + " KERBID=" + kerbID);
 					deactivatePerson(sfPerson);
 				}else if(sfPerson.isDuplicate()){
 					logger.warn(" TASK=COMPARE_UPDATE_PERSONS STATUS=FOUND_DUPLICATE_KERBID KERBID=" + sfPerson.getKerbID() + " SFID=" + sfPerson.getSfID());
@@ -1010,8 +1024,28 @@ public class Persons {
 	
 	}//end of parseRSperson
 	
+	/*
+	 * bogus kerbid
+	 * getStatus:400
+{
+  "errorCode" : "400",
+  "errorMessage" : "Bad Request",
+  "errorDetails" : [ {
+    "message" : "kerberosId is not valid"
+  } ]
+}
+
+bad URL
+getStatus: 404
+getBody: Resource Not Found
+
+	 */
 	
-	
+	/**
+	 * returns a Person from the Kerbid
+	 * @param kerbID
+	 * @return returns a Person. if an error happens getting person, returns null. if valid response, but kerbid is not valid (or missing?) returns person with isMissing() = true
+	 */
 	public static Person getAPIperson(String kerbID) {
 		Person person;
 		if(kerbID == null){
@@ -1022,11 +1056,22 @@ public class Persons {
 			
 			HttpResponse<String> response = Unirest.get("https://mit-public.cloudhub.io/people/v3/people/"  + kerbID)
 					  //.header("authorization", "Basic NmJmMjhjMGZlN2Y3NGEzYWJlZmRkZWYyYzQ5ZDljMzc6OWQxYjA0ZDgwNDczNDEzMzgxMEZEQTA2Q0M0MUMxNjM=")
-					  .header("client_id", "6bf28c0fe7f74a3abefddef2c49d9c37")
-					  .header("client_secret", "9d1b04d804734133810FDA06CC41C163")
+					  .header("client_id", Main.api_id)
+					  .header("client_secret", Main.api_secret)
 					  .header("cache-control", "no-cache")
 					  //.header("postman-token", "bbb7ce03-8aee-fef1-97c6-a137796366e4")
 					  .asString();
+			if(response.getStatus() == 400){
+				logger.warn("KERBID=" + kerbID + " " + Main.parseJsonError(response));
+				person = new Person(null);
+				return person;
+			}else if(response.getStatus() == 404){
+				logger.warn("KERBID=" + kerbID + " " + Main.parseJsonError(response));
+				return null;
+			}else if(response.getStatus() != 200){
+				logger.error("UNKNOWN_ERROR_TYPE KERBID=" + kerbID + " " +  Main.parseJsonError(response));
+				return null;
+			}
 			logger.trace(" TASK=RECEIVING_JSON KERBID=" + kerbID + " JSON=" + response.getBody());
 			JSONObject responeJson = new JSONObject(response.getBody());
 			JSONObject personJson = responeJson.getJSONObject("item");

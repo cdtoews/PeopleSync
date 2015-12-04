@@ -4,8 +4,13 @@ import java.sql.Connection;
 import java.util.HashSet;
 import java.util.Iterator;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class Person {
 
+	static final Logger logger = LogManager.getLogger(Person.class);
+	
 	private String kerbID;
 	private String firstName;
 	private String middleName;
@@ -17,6 +22,21 @@ public class Person {
 	private String sfID;
 	private HashSet<Affiliation> affs;
 	private boolean duplicate;
+	private boolean isMissing;
+	
+	/**
+	 * used to signify when a response is valid from the API, but the person is missing
+	 * @param myNull, must be null to be used
+	 * @throws Exception 
+	 */
+	public Person(String myNull){
+		if(myNull == null){
+			isMissing = true;
+		}else{
+			isMissing = false;
+			logger.error("TASK=CREATE_PERSON STATUS=ERROR NOTE=BAD_INVOCATION");
+		}
+	}
 	
 	public Person(String kerbID, String firstName, String middleName,
 			String lastName, String displayName, String email,
@@ -32,6 +52,7 @@ public class Person {
 		affs = new HashSet<Affiliation>();
 		sfID = null;
 		duplicate = false;
+		isMissing = false;
 	}
 
 	
@@ -51,10 +72,16 @@ public class Person {
 		affs = new HashSet<Affiliation>();
 		this.sfID = sfID;
 		duplicate = false;
+		isMissing = false;
 	}
 
 
+	
 
+
+	public boolean isMissing() {
+		return isMissing;
+	}
 
 	public String getSfID() {
 		return sfID;
