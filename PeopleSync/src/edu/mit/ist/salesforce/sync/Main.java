@@ -222,23 +222,24 @@ public class Main {
 		//-------------------------------------------
 		//---------- Main Dept work loop ------------
 		//-------------------------------------------
-		for(Properties eachProp:deptPropSet){
-			
-			resetLog();//reset the stringAppender
-			current_schema = eachProp.getProperty("name");
-			ThreadContext.put("current_schema", current_schema); 
-			//resetLog();
-			logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
-			//writeLog(" STATUS=STARTING_SCHEMA");
-			Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap.(so we don't have to poll API ever schema
-			depts.loadData();
-			depts.CompareUpdate();
-			depts.writeLog(getLog());
-			recordDeptLog( depts.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
-			logger.info(" STATUS=FINISHED_SCHEMA");
-			
-		}//end of looping through properties (sync sets)
-		
+		if(apiMap != null){
+			for(Properties eachProp:deptPropSet){
+				
+				resetLog();//reset the stringAppender
+				current_schema = eachProp.getProperty("name");
+				ThreadContext.put("current_schema", current_schema); 
+				//resetLog();
+				logger.info(" TASK=READING_DEPARTMENTS STATUS=STARTING_SCHEMA SCHEMA=\"" + current_schema + "\"");
+				//writeLog(" STATUS=STARTING_SCHEMA");
+				Departments depts = new Departments(eachProp,new TreeMap<String,Department>(apiMap), conn);//passing a shallow copy of apiMap.(so we don't have to poll API ever schema
+				depts.loadData();
+				depts.CompareUpdate();
+				depts.writeLog(getLog());
+				recordDeptLog( depts.getRunInfo() + getLog(true),eachProp.getProperty("sfid"));
+				logger.info(" STATUS=FINISHED_SCHEMA");
+				
+			}//end of looping through properties (sync sets)
+		}//end of if apiMap not null
 		
 		
 		//-------- People ------------
@@ -325,9 +326,17 @@ public class Main {
 		} catch (UnirestException e) {
 			
 			logger.error("TASK=LOAD_DEPT_API_DATA STATUS=EXCEPTION " , e);
-			
+			return null;
+		}catch(Exception ex){
+			logger.error("TASK=LOAD_DEPT_API_DATA STATUS=EXCEPTION ",ex);
+			return null;
 		}
 		logger.info(" TASK=LOAD_DEPT_API_DATA STATUS=FINISHED COUNT=" + apiMap.size());
+		//if we received less than 300? results, return null
+		if(apiMap.size() < 300 ){
+			logger.error("TASK=LOAD_DEPT_API_DATA STATUS=ERROR NOTE=TOO_FEW_DEPTS");
+			return null;
+		}
 		return apiMap;
 	}
 	
@@ -386,13 +395,10 @@ public class Main {
 	
 	public static void emailMe() {
 		 		
-		String username = System.getenv("smtpuser");
-		String password = System.getenv("smtppass");
 		
-		System.out.println("user:" + username);
 		
-		final String finalUser = username;
-		final String finalPass = password;
+		final String finalUser = "herokumailforme@gmail.com";
+		final String finalPass = "Te3tL@b1";
 		
 		Properties props = new Properties();
 		props.put("mail.smtp.auth", "true");
@@ -414,12 +420,11 @@ public class Main {
 			message.setRecipients(Message.RecipientType.TO,
 				InternetAddress.parse("ctoews@mit.edu"));
 			message.setSubject("FunMail");
-			message.setText("Dear Mail Crawler,"
-				+ "\n\n No spam to my email, please!");
+			message.setText("Spam Spam Spam Spam");
 
 			Transport.send(message);
 
-			System.out.println("Done");
+			
 
 		} catch (MessagingException e) {
 			throw new RuntimeException(e);
