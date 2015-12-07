@@ -69,6 +69,28 @@ public class DeptAff implements Comparator  {
 		this.name = name;
 	}
 
+	/**
+	 * check to verify that this has the required information to allow valid insertion into Salesforce
+	 * @return true if it's ok to insert this object 
+	 */
+	public boolean isInsertable(){
+		if(
+				affiliationSFID == null || affiliationSFID.equals("") ||
+				departmentSFID == null || departmentSFID.equals("") ||
+				orgUnitID == null || orgUnitID.equals("")
+				){
+			//if any of these items is empty, we can't insert in good conscience
+			return false;
+			
+		}else{
+			return true;
+		}
+			
+		
+		
+		
+	}
+	
 	public String toString(){
 		String cr = "\n";
 		String prefix = "\t\t";

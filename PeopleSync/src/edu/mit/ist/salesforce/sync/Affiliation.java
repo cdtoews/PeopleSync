@@ -50,7 +50,8 @@ public class Affiliation {
 
 	public void addDept(DeptAff deptAff){
 		if(deptAff != null){
-			depts.put(deptAff.getOrgUnitID(), deptAff);
+			String thisOUID = deptAff.getOrgUnitID();
+			depts.put(thisOUID, deptAff);
 		}
 		
 	}

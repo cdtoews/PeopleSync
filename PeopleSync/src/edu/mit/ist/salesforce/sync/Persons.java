@@ -74,7 +74,7 @@ public class Persons {
 			  + " 	aff.<affiliation_inactive_date_field__c> as affiliation_inactive_date_field__c,  \n " 
 			  + " 	-- DepartmentAffiliation  \n " 
 			  + " 	deptaff.sfid as deptaff_sfid,  \n " 
-			  + " 	deptaff.<deptaff_orgunit_id_field__c> as deptaff_orgunit_id_field__c,  \n " 
+			  + " 	COALESCE(deptaff.<deptaff_orgunit_id_field__c>, '') as deptaff_orgunit_id_field__c,  \n " 
 			  + " 	deptaff.<deptaff_affiliation_lookup_field__c> as deptaff_affiliation_lookup_field__c,  \n " 
 			  + " 	deptaff.<deptaff_department_lookup_field__c> as deptaff_department_lookup_field__c,  \n " 
 			  + " 	deptaff.<deptaff_from_api_field__c> as deptaff_from_api_field__c,  \n " 
@@ -473,9 +473,11 @@ public class Persons {
 				//kicking and error for THIS person
 				logger.error(" TASK=COMPARING_PERSON STATUS=EXCEPTION KERBID="  + kerbID,ex);
 			}
+			if(apiPerson != null){
+				compareUpdateAffs(apiPerson.getAffs(),sfPerson.getAffs(),sfPerson.getSfID());
+				logger.info("TASK=COMPARE_UPDATE_PERSONS STATUS=FINISHED KERBID=" + kerbID);
+			}
 			
-			compareUpdateAffs(apiPerson.getAffs(),sfPerson.getAffs(),sfPerson.getSfID());
-			logger.info("TASK=COMPARE_UPDATE_PERSONS STATUS=FINISHED");
 		}//end of while sfPeople has next
 		
 		
@@ -663,6 +665,13 @@ public class Persons {
 			logger.info(" STATUS=NOT_UPDATING TASK=INSERTING_DEPTAFF DEPT_SFID=" + deptAff.getDepartmentSFID());
 			return;
 		}
+		//let's verify that we have the values we need
+		if(!deptAff.isInsertable()){
+			logger.error("TASK=INSERTING_DEPTAFF STATUS=DEPTAFF_NOT_INSERTABLE AFFILIATINID=" + deptAff.getAffiliationSFID() + " DEPARTMENTID=" + deptAff.getDepartmentSFID() + " ORGUNITID=" + deptAff.getOrgUnitID() );
+			return;
+		}
+		
+		
 		deptAffsCreated++;
 		try{
 			insertDeptAff.clearParameters();

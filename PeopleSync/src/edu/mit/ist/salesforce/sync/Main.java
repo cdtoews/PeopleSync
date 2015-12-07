@@ -173,7 +173,14 @@ public class Main {
 		stringAppender.addToLogger(logger.getName(), Level.INFO);
 		stringAppender.start();
 		
-		conn = getConnection();
+		try{
+			conn = getConnection();
+		}catch(Exception ex){
+			logger.catching(ex);
+			logger.fatal(" TASK=STARTING STATUS=SQL_CONNECTION_DOWN NOTE=CLOSING_APP");
+			System.exit(1);
+		}
+		
 		//let's get our home schema
 		home_schema = System.getenv("HOME_SCHEMA");
 		api_id = System.getenv("api_id");
@@ -186,12 +193,17 @@ public class Main {
 		//System.exit(0);
 		
 		Main me = new Main();
+		if(me.conn == null || me.conn.isClosed()){
+			logger.fatal(" TASK=STARTING STATUS=SQL_CONNECTION_DOWN NOTE=CLOSING_APP");
+			System.exit(1);
+		}
 		me.run();
 	}
 	
 	public  void run() throws URISyntaxException, SQLException{
 		ThreadContext.put("id", UUID.randomUUID().toString()); // Add the fishtag;
-		ThreadContext.put("current_schema", current_schema); //used in console logging to know what schema we are in
+		ThreadContext.put("current_schema", "INITIALIZING"); //used in console logging to know what schema we are in
+		
 
 		
 
@@ -214,7 +226,7 @@ public class Main {
 			}
 			deptPropSet.add(thisProp);
 		}//end of while syncListRS.next
-		
+		ThreadContext.put("current_schema", "INITIALIZING");
 		syncListRS.close();
 		syncListPS.close();
 		//load API data once
