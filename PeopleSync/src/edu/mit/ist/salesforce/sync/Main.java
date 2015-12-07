@@ -166,7 +166,7 @@ public class Main {
 		loggerConfig.setLevel(level);
 		ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig.
 		
-		logger.fatal("LOG_LEVEL=" + level.name());
+		logger.info("LOG_LEVEL=" + level.name());
 
 		// Create a String Appender to capture log output
 		stringAppender = StringAppender.createStringAppender(stringAppenderFormat);
